@@ -65,8 +65,62 @@ The closest adjacent project is **AOZ** (oath-based on-chain stake → slash). "
 | 2 | Oracle service — x402 nanopayment-gated HTTP endpoint | ✅ Complete |
 | 3 | Consumer agent — LLM-reasoned adjudication loop | ✅ Complete |
 | 4 | Frontend dashboard — live traction strip, fault injection, verdict feed | ✅ Complete |
-| 5 | USYC yield-bearing collateral (core differentiator) | 🔜 Pending |
+| 5 | USYC yield-bearing collateral — same contract, Teller integration, 13 new tests | ✅ Complete |
 | 6 | Video, writeup, submission | 🔜 Pending |
+
+---
+
+## Phase 5 — What Was Built
+
+### USYC yield-bearing collateral
+
+The Circle-specific moat: **`ArcIDBond.sol` already supports any ERC-20** — the same contract deployed with the USYC token address gives you yield-bearing bonds. No new contract code.
+
+**What was built:**
+
+| Artifact | Description |
+|----------|-------------|
+| `contracts/mocks/MockUSYC.sol` | 8-decimal yield-bearing mock; `simulateYield(bps)` advances share price |
+| `contracts/interfaces/ITeller.sol` | Interface for Arc testnet Teller (`deposit` / `redeem` / `sharePrice`) |
+| `test/ArcIDBondUSYC.test.js` | 13 tests telling the yield story end-to-end |
+| `scripts/deploy_usyc.js` | Deploy ArcIDBond with USYC; handles allowlist absence gracefully |
+| `scripts/mint_usyc.js` | Mint USYC from USDC via Teller on Arc testnet |
+| `frontend/src/components/USYCBondCard.jsx` | Purple "yield-bearing" card with narrative + deployed contract address |
+
+**Test suite highlights (`npm test` — 40 passing):**
+
+```
+USYC bond face value is $5.00 USDC at deposit time (sharePrice = $1.00)
+bond value increases as USYC share price accrues yield
+  → 5 USYC * $1.005 = $5.025 after 50 bps yield
+491 bps (~4.9% APY) yields the correct appreciated bond value
+consumer's USYC is worth more than the original $5.00 bond face value
+  → 5 USYC * $1.02 = $5.10 after 200 bps while bonded
+agent receives USYC back on withdrawal (yield value is captured on Teller redeem)
+two USYC bonds coexist; yield accrues on both
+```
+
+**The narrative the tests prove:**
+> Bond earns T-bill yield (~4.9% APY) while at stake. On a confirmed breach, the consumer receives USYC that has already appreciated — more than face value. **Capital at risk that isn't idle capital.**
+
+**Deploy to Arc testnet:**
+```bash
+# Step 1 — get USYC (requires Circle allowlist)
+npm run mint:usyc:arc
+
+# Step 2 — deploy ArcIDBond with USYC collateral
+npm run deploy:usyc:arc
+# → handles allowlist-absent case: still deploys + prints contract address
+```
+
+**USYC addresses on Arc testnet:**
+
+| Contract | Address |
+|----------|---------|
+| USYC token | `0xe9185F0c5F296Ed1797AaE4238D26CCaBEadb86C` |
+| Teller (mint/redeem) | `0x9fdF14c5B14173D74C08Af27AebFf39240dC105A` |
+
+**If allowlist hasn't arrived:** `deploy:usyc:arc` still deploys the contract. Judges can inspect the code and TEE-gating at the deployed address. The bond is posted once allowlist access is confirmed.
 
 ---
 

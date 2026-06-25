@@ -127,6 +127,12 @@ app.get("/api/stats", (req, res) => {
     oracle:     config.ORACLE_WALLET_ADDRESS,
     consumer:   lastConsumer,
     fault_mode: activeFaultMode,
+    usyc: {
+      token:      config.USYC_TOKEN_ADDRESS,
+      teller:     config.TELLER_ADDRESS,
+      bond:       config.USYC_BOND_ADDRESS  || null,
+      usdc_bond:  config.USDC_BOND_ADDRESS  || null,
+    },
   });
 });
 

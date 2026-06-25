@@ -1,7 +1,8 @@
 import { useEffect, useState, useRef } from "react";
-import TractionStrip from "./components/TractionStrip.jsx";
-import AgentCard     from "./components/AgentCard.jsx";
-import VerdictHistory from "./components/VerdictHistory.jsx";
+import TractionStrip  from "./components/TractionStrip.jsx";
+import AgentCard      from "./components/AgentCard.jsx";
+import VerdictHistory  from "./components/VerdictHistory.jsx";
+import USYCBondCard   from "./components/USYCBondCard.jsx";
 
 const POLL_MS = 5000;
 
@@ -111,6 +112,11 @@ export default function App() {
               </div>
             </div>
           )}
+
+          <div>
+            <div style={s.section}>Phase 5 — Yield-Bearing Bond</div>
+            <USYCBondCard usyc={stats?.usyc} />
+          </div>
         </div>
 
         {/* Right column: verdict feed */}

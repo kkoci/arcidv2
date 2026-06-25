@@ -131,9 +131,14 @@ frontend/vite.config.js             Vite config; proxies /api /admin /health →
 README.md                            Architecture, phase status, contract reference
 ```
 
-Phase 5 files (to be created):
+Phase 5 files:
 ```
-(USYC: redeploy ArcIDBond with USYC token address; same contract, different constructor arg)
+contracts/mocks/MockUSYC.sol         8-decimal yield-bearing mock; simulateYield(bps) for tests
+contracts/interfaces/ITeller.sol     Teller interface (deposit/redeem/sharePrice)
+test/ArcIDBondUSYC.test.js           13 tests: face value, yield accrual, slash includes yield
+scripts/deploy_usyc.js               Deploy ArcIDBond with USYC; handles allowlist gracefully
+scripts/mint_usyc.js                 Mint USYC from USDC via Teller on Arc testnet
+frontend/src/components/USYCBondCard.jsx  Purple yield-bearing card with narrative + addresses
 ```
 
 ---
@@ -152,7 +157,7 @@ These events are the source of truth for the frontend live counters.
 
 ---
 
-## Test Suite (27 passing — run with `npm test`)
+## Test Suite (40 passing — run with `npm test`)
 
 ```
 test/ArcIDBond.test.js
@@ -165,6 +170,13 @@ test/ArcIDBond.test.js
   withdrawBond            5   success, BondWithdrawn event, record delete, NoBondFound, AlreadySlashed
   isActiveBondedAgent     3   false/true/false across lifecycle
   setAuthorizedSlasher    4   success, event, OwnableUnauthorizedAccount, new slasher works
+
+ArcIDBond — USYC yield-bearing collateral (Phase 5)  [test/ArcIDBondUSYC.test.js]
+  basic USYC bond         4   accepts USYC, BondPosted event, $5 face value, TEE-gating still applies
+  yield-bearing           4   value increases after simulateYield, 490bps APY, monotonic price, YieldAccrued event
+  slash                   3   consumer gets USYC, worth > $5 after yield, agent can re-bond
+  withdrawal              1   agent gets USYC back; redeems for more USDC via Teller
+  multi-agent             1   two bonds coexist, yield accrues on both (TVL tracking)
 ```
 
 **Run tests:** `npm test` (no external RPC, no .env required — uses Hardhat in-memory network)
@@ -182,7 +194,7 @@ the test that proves the moat. It must always pass. Do not weaken the assertion.
 | 2 | Oracle service — x402 nanopayment endpoint, fault modes | ✅ Complete |
 | 3 | Consumer agent — LLM adjudication, slash loop | ✅ Complete |
 | 4 | Frontend — live traction strip, fault injection, verdict feed | ✅ Complete |
-| 5 | USYC yield-bearing collateral | 🔜 Pending |
+| 5 | USYC yield-bearing collateral — MockUSYC, ITeller, 13 new tests | ✅ Complete |
 | 6 | Video, writeup, submission | 🔜 Pending |
 
 ---
@@ -232,11 +244,14 @@ the test that proves the moat. It must always pass. Do not weaken the assertion.
 2. `require(condition, "human-readable string")` for the TEE-gating check only — this is the screenshot string.
 3. Never use `assert()`.
 
-### On contract upgrades / Phase 5
+### On USYC (Phase 5 — complete)
 
-1. For USYC: deploy a new `ArcIDBond` instance with the USYC token address. Same code, different constructor arg. No proxy upgrades.
-2. Update `deployments/arcTestnet.json` with both USDC and USYC bond addresses.
-3. Update `README.md` deployed addresses table.
+1. The same `ArcIDBond.sol` supports USYC — deploy with `_collateralToken = USYC address`. No new contract code.
+2. MockUSYC uses a share-price model (8 decimals, starts at $1.00). `simulateYield(bps)` increases price.
+3. `deploy_usyc.js` handles the allowlist-absent case: still deploys and prints address for judges.
+4. Teller address (Arc testnet): `0x9fdF14c5B14173D74C08Af27AebFf39240dC105A` — `deposit(USDC, amount, 0)` mints USYC.
+5. After deploying: set `USYC_BOND_ADDRESS` in `oracle/.env` so frontend shows the deployed address.
+6. Update `deployments/arcTestnet_usyc.json` and the README deployed addresses table.
 
 ---
 

@@ -27,4 +27,10 @@ module.exports = {
 
   // Admin token required to hit ?fault= (prevents demo spoiling in prod)
   FAULT_TOKEN: process.env.FAULT_TOKEN || "dev-fault-token",
+
+  // Phase 5 — USYC yield-bearing bond contract (optional; "" if not deployed yet)
+  USYC_BOND_ADDRESS:  process.env.USYC_BOND_ADDRESS  || "",
+  USDC_BOND_ADDRESS:  process.env.USDC_BOND_ADDRESS  || "",
+  USYC_TOKEN_ADDRESS: process.env.USYC_TOKEN_ADDRESS || "0xe9185F0c5F296Ed1797AaE4238D26CCaBEadb86C",
+  TELLER_ADDRESS:     process.env.TELLER_ADDRESS     || "0x9fdF14c5B14173D74C08Af27AebFf39240dC105A",
 };
