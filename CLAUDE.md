@@ -34,9 +34,9 @@ Before starting any task, read in this order:
 | Registry interface | `IArcIDRegistry` — reads live `ArcIDRegistry` on Arc |
 | Contract tooling | Hardhat v2 + `@nomicfoundation/hardhat-toolbox` |
 | Oracle service | Node.js/Express + x402 middleware (Phase 2) |
-| Consumer agent | Node.js or Python with Anthropic SDK (Phase 3) |
+| Consumer agent | Node.js with Anthropic SDK (Phase 3) |
 | LLM adjudication | Claude claude-sonnet-4-6 via `anthropic` SDK (Phase 3) |
-| Frontend | arcid-jade (existing Vercel, React/Vite) — extended in Phase 4 |
+| Frontend | React 18 + Vite 5 — standalone `frontend/` dir, port 5174 (Phase 4) |
 | x402 payments | `circlefin/arc-nanopayments` Gateway pattern |
 | Collateral (Phase 1) | USDC — Arc testnet: `0x3600000000000000000000000000000000000000` |
 | Collateral (Phase 5) | USYC — Arc testnet: `0xe9185F0c5F296Ed1797AaE4238D26CCaBEadb86C` |
@@ -88,8 +88,11 @@ Consumer Agent (Phase 3) ⭐
   │    verdict + written rationale (not a cron job — this is the agency beat)
   └─ On breach → ArcIDBond.slash()
 
-Frontend (Phase 4)
-  └─ Live counters from BondPosted + AgentSlashed events (on-chain truth)
+Frontend (Phase 4) ✅
+  ├─ Vite proxy → oracle (all /api + /admin calls proxied, no CORS issue)
+  ├─ TractionStrip — 5-stat header (bonds, calls, volume, ok, slash)
+  ├─ AgentCard — oracle identity, fault injection buttons (stale/null/bad-sig)
+  └─ VerdictHistory — scrolling feed of every Claude adjudication
 
 USYC Bond (Phase 5)
   └─ Same ArcIDBond.sol, deployed with USYC token address
@@ -110,22 +113,27 @@ test/ArcIDBond.test.js               27-test suite covering all Phase 1 paths
 hardhat.config.js                    Hardhat config (hardhat / localhost / arcTestnet)
 .env.example                         All required env vars documented
 deployments/<network>.json           Persisted address output from deploy.js
-oracle/src/index.js                  Phase 2: Express oracle service (x402-gated)
+oracle/src/index.js                  Phase 2+4: Express oracle; x402-gated + stats/verdicts/admin endpoints
 oracle/src/signer.js                 Signs (value, timestamp) with oracle wallet
 oracle/src/config.js                 Oracle env config
 oracle/.env.example                  Oracle env vars
-consumer/src/index.js               Phase 3: Main loop — fetch → verify → adjudicate → slash
+consumer/src/index.js               Phase 3+4: Main loop — fetch → verify → adjudicate → slash → POST verdict
 consumer/src/adjudicator.js         LLM adjudication via Claude tool_use (structured verdict)
 consumer/src/verifier.js            Signature verification (ethers.verifyMessage)
 consumer/src/oracle.js              x402 oracle client (dev bypass + prod path)
 consumer/src/slasher.js             ArcIDBond.slash() on-chain caller
 consumer/src/config.js              Consumer env config
+frontend/src/App.jsx                Phase 4: Root component — polls /api/stats + /api/verdicts every 5s
+frontend/src/components/TractionStrip.jsx  5-stat header row
+frontend/src/components/AgentCard.jsx      Oracle identity + fault injection
+frontend/src/components/VerdictHistory.jsx Scrolling adjudication feed
+frontend/vite.config.js             Vite config; proxies /api /admin /health → oracle:3001
 README.md                            Architecture, phase status, contract reference
 ```
 
-Phase 4–5 files (to be created):
+Phase 5 files (to be created):
 ```
-(Phase 4 extends the existing arcid-jade frontend — no new directory)
+(USYC: redeploy ArcIDBond with USYC token address; same contract, different constructor arg)
 ```
 
 ---
@@ -173,7 +181,7 @@ the test that proves the moat. It must always pass. Do not weaken the assertion.
 | 1 | `ArcIDBond.sol` — bond contract, TEE-gating, 27 tests | ✅ Complete |
 | 2 | Oracle service — x402 nanopayment endpoint, fault modes | ✅ Complete |
 | 3 | Consumer agent — LLM adjudication, slash loop | ✅ Complete |
-| 4 | Frontend wiring — live counters, Trigger Fault button | 🔜 Next |
+| 4 | Frontend — live traction strip, fault injection, verdict feed | ✅ Complete |
 | 5 | USYC yield-bearing collateral | 🔜 Pending |
 | 6 | Video, writeup, submission | 🔜 Pending |
 
@@ -205,7 +213,7 @@ the test that proves the moat. It must always pass. Do not weaken the assertion.
 
 ### On every contract change
 
-1. Run `npm test` — confirm 17 tests passing, zero failures.
+1. Run `npm test` — confirm 27 tests passing, zero failures.
 2. The gating test ("reverts for an unverified wallet with the exact gating message") must always pass. This is the moat; do not change the revert string or weaken the check.
 3. If you add a new event, update the events table in this file and README.md.
 4. If you change constructor args, update `.env.example` and the deploy script.

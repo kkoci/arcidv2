@@ -180,10 +180,11 @@ async function runCycle(cycleNumber) {
     }
   }
 
-  // ── 5. Log ───────────────────────────────────────────────────────────────
+  // ── 5. Log + push to oracle API ──────────────────────────────────────────
   const duration = Date.now() - cycleStart;
   record = {
     ...record,
+    consumer:        config.CONSUMER_WALLET_ADDRESS,
     oracle_value:    oracleResponse.value,
     oracle_ts:       oracleResponse.timestamp,
     oracle_age_s:    ageSeconds,
@@ -199,6 +200,15 @@ async function runCycle(cycleNumber) {
     duration_ms:     duration,
   };
   logCycle(record);
+
+  // Push verdict to oracle API so frontend can display it in real-time
+  try {
+    await fetch(`${config.ORACLE_URL}/api/verdicts`, {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify(record),
+    });
+  } catch { /* oracle may not be running — non-fatal */ }
 
   console.log(`  ${DIM}(${duration}ms)${RESET}`);
   return record;

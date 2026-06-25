@@ -64,9 +64,48 @@ The closest adjacent project is **AOZ** (oath-based on-chain stake → slash). "
 | 1 | `ArcIDBond.sol` deployed and verified on Arc testnet | ✅ Complete |
 | 2 | Oracle service — x402 nanopayment-gated HTTP endpoint | ✅ Complete |
 | 3 | Consumer agent — LLM-reasoned adjudication loop | ✅ Complete |
-| 4 | Frontend wiring — live counters, slash button | 🔜 Next |
+| 4 | Frontend dashboard — live traction strip, fault injection, verdict feed | ✅ Complete |
 | 5 | USYC yield-bearing collateral (core differentiator) | 🔜 Pending |
 | 6 | Video, writeup, submission | 🔜 Pending |
+
+---
+
+## Phase 4 — What Was Built
+
+### Frontend dashboard (`frontend/`)
+
+A live React dashboard (Vite 5, port 5174) that visualises system health in real-time without any manual curl commands — the single-pane-of-glass for a hackathon demo.
+
+**Five-panel layout:**
+
+| Panel | What it shows |
+|-------|---------------|
+| **Traction strip** | Bonded agents · Total calls · Volume (USDC) · OK verdicts · Slash events |
+| **Agent card** | Oracle wallet address · active/slashed badge · collateral · fault-injection buttons |
+| **Fault controls** | One-click `stale / null / bad-sig` buttons calling `POST /admin/fault` — viewer can watch slash appear live |
+| **System info** | Chain, protocol, TEE gate, adjudicator, consumer wallet |
+| **Verdict feed** | Scrolling history of every Claude adjudication: badge (ok/breach/uncertain), three check marks, LLM rationale, payment amount, age |
+
+The dashboard polls `/api/stats` and `/api/verdicts` every 5 seconds and shows a live/disconnected indicator. All API calls are proxied through Vite to the oracle (no CORS in production build).
+
+**Start:**
+```bash
+cd frontend
+npm install
+npm run dev   # http://localhost:5174
+```
+
+**Oracle API extensions (added for Phase 4):**
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /api/stats` | Traction counters + oracle/consumer addresses |
+| `GET /api/verdicts` | Last 50 adjudications (newest first) |
+| `POST /api/verdicts` | Consumer agent pushes verdict after each cycle |
+| `POST /admin/fault` | Set fault mode (`stale` / `null` / `bad-sig`) |
+| `POST /admin/fault/reset` | Clear fault mode |
+
+Consumer agent now sends `consumer` address in every verdict POST so the dashboard can surface it.
 
 ---
 
