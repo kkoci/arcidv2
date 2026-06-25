@@ -1,0 +1,32 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Environment — never commit secrets
+.env
+**/.env
+!**/.env.example
+
+# Hardhat build artifacts
+cache/
+artifacts/
+typechain-types/
+
+# Deployment outputs (commit arcTestnet.json manually; skip local ephemeral ones)
+deployments/hardhat.json
+deployments/localhost.json
+
+# Oracle + consumer runtime
+oracle/logs/
+consumer/logs/
+*.jsonl
+
+# Coverage
+coverage/
+coverage.json
+
+# Misc
+.DS_Store
+Thumbs.db
+*.log
+dist/

@@ -1,0 +1,22 @@
+{
+  "name": "arcid-consumer",
+  "version": "2.0.0",
+  "description": "ArcID Consumer Agent — LLM-reasoned oracle adjudication with on-chain slash",
+  "main": "src/index.js",
+  "scripts": {
+    "start":          "node src/index.js",
+    "dev":            "node --watch src/index.js",
+    "once":           "node src/index.js --once",
+    "fault:stale":    "node src/index.js --fault stale --once",
+    "fault:null":     "node src/index.js --fault null --once",
+    "fault:bad-sig":  "node src/index.js --fault bad-sig --once"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.52.0",
+    "dotenv":            "^16.4.5",
+    "ethers":            "^6.13.2"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

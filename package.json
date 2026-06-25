@@ -1,0 +1,20 @@
+{
+  "name": "arcid-bond",
+  "version": "2.0.0",
+  "description": "ArcIDBond — bonded agent reputation for nanopayment networks on Arc",
+  "scripts": {
+    "compile":       "hardhat compile",
+    "test":          "hardhat test",
+    "deploy:local":  "hardhat run scripts/deploy.js --network hardhat",
+    "deploy:arc":    "hardhat run scripts/deploy.js --network arcTestnet",
+    "gating:local":  "hardhat run scripts/verify_gating.js --network hardhat",
+    "gating:arc":    "hardhat run scripts/verify_gating.js --network arcTestnet",
+    "node":          "hardhat node"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+    "@openzeppelin/contracts": "^5.0.2",
+    "dotenv": "^16.4.5",
+    "hardhat": "^2.22.4"
+  }
+}
