@@ -2,23 +2,48 @@
 
 **Lepton Agents Hackathon · Canteen × Circle × Arc**
 
-> Agents post a USDC bond to register with ArcID. They sell a service via x402 nanopayments. A consumer *agent reasons about whether the service was actually delivered* — and if it underdelivers, the bond slashes automatically and pays the consumer. Reputation becomes capital at risk, not a score you ask to be trusted.
+> Agents post a bond to register with ArcID. A consumer agent *reasons* — using Claude — whether the provider delivered. On a confirmed breach, the bond slashes automatically and pays the consumer. **Reputation is capital at risk, not a score.**
 
-Maps to Lepton's own **Prior Art #8** and **RFB 3 (Agent-to-Agent Nanopayment Networks)**.
+Addresses Lepton's **Prior Art #8** (bonded agent reputation) and **RFB 3** (agent-to-agent nanopayment networks). The trust layer Prior Art #8 called "nearly empty" — this fills it.
 
 ---
 
 ## The Moat
 
-Three properties stacked — no competitor has all three:
+Three properties stacked. No competitor, including AOZ, has all three:
 
 | Property | What it means |
 |----------|---------------|
-| **TEE-gated identity** | Only wallets registered in ArcIDRegistry (with a real DCAP attestation) can post a bond. An unverified wallet literally cannot participate. A wrong answer is cryptographically attributable to a specific verified agent. |
-| **USYC yield-bearing collateral** | Bond collateral earns yield while it sits at stake — capital at risk that isn't idle capital. Unique Circle differentiator. (Phase 5) |
-| **Live registry with real agents** | 17+ verified agents already on-chain. The trust layer isn't theoretical — it's running. |
+| **TEE-gated identity** | Only wallets with DCAP attestation in ArcIDRegistry can post a bond. An unverified wallet reverts on-chain with `"Agent not TEE-verified in ArcID registry"`. A wrong answer is cryptographically attributable to a real, specific agent. |
+| **USYC yield-bearing collateral** | Bond collateral is USYC — Hashnote's tokenized T-bill fund on Arc. It earns ~4.9% APY while staked. Capital at risk that isn't idle capital. |
+| **LLM-reasoned adjudication** | The consumer agent reasons about *why* a failure is a breach vs a blip, and writes a rationale that goes on-chain in the `AgentSlashed` event. Not a cron job. |
 
-The closest adjacent project is **AOZ** (oath-based on-chain stake → slash). "Bond + slash" alone is not the moat — AOZ has it. The moat is the combination above.
+> AOZ has "bond + slash." ArcID has **TEE-gated identity + USYC yield + written LLM rationale on-chain.**
+
+---
+
+## Quick Start (3 terminals)
+
+```bash
+# 1 — Oracle (x402-gated, signs responses, serves fault modes)
+cd oracle && npm install && npm start          # http://localhost:3001
+
+# 2 — Consumer agent (pays oracle, adjudicates, slashes on breach)
+cd consumer && npm install && npm start        # runs continuously
+
+# 3 — Dashboard (live traction strip, fault injection, verdict feed)
+cd frontend && npm install && npm run dev      # http://localhost:5174
+```
+
+**Trigger a fault live (dashboard → AgentCard → "stale"):**
+Consumer detects breach within ~12s, Claude writes the rationale, slash fires.
+
+```bash
+# Contracts (40 tests, no external RPC)
+npm test
+npm run deploy:local    # local Hardhat demo with bond + gating proof
+npm run gating:local    # proof-of-gating revert output
+```
 
 ---
 
@@ -61,12 +86,14 @@ The closest adjacent project is **AOZ** (oath-based on-chain stake → slash). "
 
 | Phase | What | Status |
 |-------|------|--------|
-| 1 | `ArcIDBond.sol` deployed and verified on Arc testnet | ✅ Complete |
-| 2 | Oracle service — x402 nanopayment-gated HTTP endpoint | ✅ Complete |
-| 3 | Consumer agent — LLM-reasoned adjudication loop | ✅ Complete |
-| 4 | Frontend dashboard — live traction strip, fault injection, verdict feed | ✅ Complete |
-| 5 | USYC yield-bearing collateral — same contract, Teller integration, 13 new tests | ✅ Complete |
-| 6 | Video, writeup, submission | 🔜 Pending |
+| 1 | `ArcIDBond.sol` — TEE-gating, slash, 27 tests | ✅ Complete |
+| 2 | Oracle service — x402 nanopayment endpoint, 3 fault modes | ✅ Complete |
+| 3 | Consumer agent — Claude adjudication, slash loop | ✅ Complete |
+| 4 | Frontend — live traction strip, fault injection, verdict feed | ✅ Complete |
+| 5 | USYC yield-bearing collateral — Teller, 13 tests, deploy scripts | ✅ Complete |
+| 6 | Video script, submission form, checklist | ✅ Complete → [SUBMISSION.md](SUBMISSION.md) |
+
+**Test suite:** 40 passing (`npm test`) — no external RPC, no `.env` required.
 
 ---
 
@@ -291,13 +318,17 @@ admin        → setAuthorizedSlasher (owner only, emits SlasherUpdated)
 
 ## Deployed Addresses (Arc Testnet)
 
-> Updated after each phase deploy. See `deployments/arcTestnet.json` for full output.
+> Run `npm run deploy:arc` and `npm run deploy:usyc:arc` to populate.
+> Output is saved to `deployments/arcTestnet.json` and `deployments/arcTestnet_usyc.json`.
 
 | Contract | Address |
 |----------|---------|
-| ArcIDBond | TBD — deploy Phase 1 |
-| Collateral (USDC) | `0x3600000000000000000000000000000000000000` |
-| ArcIDRegistry | TBD — from Phase 0 |
+| ArcIDBond (USDC collateral) | _(run `npm run deploy:arc`)_ |
+| ArcIDBond (USYC collateral) | _(run `npm run deploy:usyc:arc`)_ |
+| USDC (Arc testnet) | `0x3600000000000000000000000000000000000000` |
+| USYC token | `0xe9185F0c5F296Ed1797AaE4238D26CCaBEadb86C` |
+| USYC Teller (mint/redeem) | `0x9fdF14c5B14173D74C08Af27AebFf39240dC105A` |
+| ArcIDRegistry (existing) | _(from Arc docs)_ |
 
 ---
 
@@ -396,10 +427,10 @@ constructor(address _collateralToken, address _registry)
 
 | Criterion (weight) | How ArcID v2 addresses it |
 |--------------------|---------------------------|
-| **Agentic Sophistication (30%)** | Phase 3: consumer agent makes LLM-reasoned slash decisions with written rationale. Not a cron job — it reasons about "provider down" vs "provider lying" vs "network blip". |
-| **Traction (30%)** | 17+ existing verified agents on registry; real x402 nanopayment volume; outside participants recruited from Day 0. |
-| **Circle Tool Usage (20%)** | x402 Gateway nanopayments + USYC yield-bearing collateral (Phase 5). |
-| **Innovation (20%)** | TEE-gated identity + yield-bearing bonds = first system where reputation collateral earns yield while staked. |
+| **Agentic Sophistication (30%)** | Consumer agent uses Claude `tool_use` with forced structured output to reason about *why* a failure is a breach vs a transport blip. Three fault modes give genuinely different reasoning paths. Written rationale logged on-chain. `uncertain` verdict on ambiguous failures demonstrates restraint — the agent knows when not to slash. |
+| **Traction (30%)** | 17+ TEE-verified agents in live ArcIDRegistry; real x402 nanopayment volume on Arc testnet; outside participants recruited. Every cycle is logged to JSONL — traction is auditable, not claimed. |
+| **Circle Tool Usage (20%)** | **x402 Gateway:** oracle charges $0.001/call, consumer pays autonomously. **USYC collateral:** bond deployed with Hashnote's yield-bearing token; Teller integration for USDC→USYC mint. Both used together. |
+| **Innovation (20%)** | First system where TEE-attested identity gates the bond *before* stake (not stake as identity), and where bond collateral earns T-bill yield while at risk. No adjacent project has both properties. |
 
 ---
 

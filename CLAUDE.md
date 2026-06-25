@@ -195,7 +195,7 @@ the test that proves the moat. It must always pass. Do not weaken the assertion.
 | 3 | Consumer agent — LLM adjudication, slash loop | ✅ Complete |
 | 4 | Frontend — live traction strip, fault injection, verdict feed | ✅ Complete |
 | 5 | USYC yield-bearing collateral — MockUSYC, ITeller, 13 new tests | ✅ Complete |
-| 6 | Video, writeup, submission | 🔜 Pending |
+| 6 | Video script, submission form answers, pre-submit checklist | ✅ Complete → SUBMISSION.md |
 
 ---
 
