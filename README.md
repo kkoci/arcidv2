@@ -630,6 +630,61 @@ constructor(address _collateralToken, address _registry)
 
 ---
 
+## Phala Cloud Deployment (oracle TDX)
+
+The oracle service is containerized and ready to deploy to a Phala TDX CVM, producing a **real Intel TDX quote** from `/api/attest` instead of a self-signed prototype.
+
+### How it works
+
+`GET /api/attest` is a new endpoint on the oracle. When `USE_REAL_PHALA=true`:
+1. Computes `report_data = keccak256(oracle_wallet_address)` (32 bytes)
+2. Signs it raw with the oracle private key (no EIP-191, matching `DCAPVerifier._recover()`)
+3. POSTs to `http://127.0.0.1:9000/attestation/quote` — the Phala dstack agent running inside the CVM
+4. Returns `{ quote, report_data, report_data_sig, attested_signer, mrtd, real_tdx: true }`
+
+When `USE_REAL_PHALA=false` (default, local dev), the same endpoint returns a structurally-valid TDX v4 prototype quote — same format, self-signed, passes `DCAPVerifier` on-chain.
+
+### Files
+
+| File | Purpose |
+|------|---------|
+| `oracle/Dockerfile` | Node 18 alpine, `linux/amd64`, exposes port 3001 |
+| `oracle/src/attest.js` | Attestation logic — real Phala path + prototype fallback |
+| `oracle/.env.example` | Documents `USE_REAL_PHALA` and `PHALA_ENDPOINT` |
+
+### Build & deploy commands
+
+```bash
+# 1. Build for linux/amd64
+docker build --platform linux/amd64 -t kkoci/arcid2-oracle:latest oracle/
+
+# 2. Push to Docker Hub
+docker push kkoci/arcid2-oracle:latest
+
+# 3. Deploy to Phala Cloud
+#    Dashboard: https://cloud.phala.network/dashboard/cvm
+#    → "Deploy CVM" → Docker image: kkoci/arcid2-oracle:latest
+#    → Port mapping: 3001
+#    → Environment variables (from oracle/.env, plus):
+#         USE_REAL_PHALA=true
+#         PHALA_ENDPOINT=http://127.0.0.1:9000   (dstack default, no change needed)
+#         PORT=3001
+```
+
+### After deploy
+
+```bash
+# CVM URL format: https://<hash>-3001.dstack-pha-prod5.phala.network/
+# Smoke test — confirm real quote comes back:
+curl https://<cvm-hash>-3001.dstack-pha-prod5.phala.network/api/attest | jq .real_tdx
+
+# Expected: true
+# The quote field is a hex-encoded TDX DCAP v4 quote (≥592 bytes).
+# Pass it to ArcIDRegistryV2.registerAgent() along with report_data_sig.
+```
+
+---
+
 ## Future Work
 
 - **Decentralized multi-slasher:** dispute window + N-of-M slasher quorum (intentionally out of scope for hackathon cadence)

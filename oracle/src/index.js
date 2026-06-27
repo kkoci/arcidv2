@@ -18,6 +18,7 @@ const express    = require("express");
 const config     = require("./config");
 const { signResponse } = require("./signer");
 const { getChainStats, triggerCycle } = require("./chain");
+const { getAttestation } = require("./attest");
 
 const app = express();
 app.use(express.json());
@@ -140,6 +141,19 @@ app.get("/api/stats", (req, res) => {
 app.get("/api/verdicts", (req, res) => {
   // newest first — wrapped for frontend consumption
   res.json({ verdicts: [...verdicts].reverse() });
+});
+
+// TDX DCAP attestation quote for this oracle instance
+// USE_REAL_PHALA=true  → real quote from Phala dstack (CVM only)
+// USE_REAL_PHALA=false → prototype quote, self-signed (local dev)
+app.get("/api/attest", async (req, res) => {
+  try {
+    const attestation = await getAttestation();
+    res.json(attestation);
+  } catch (e) {
+    console.error("[attest]", e.message);
+    res.status(500).json({ error: e.message, real_tdx: config.USE_REAL_PHALA });
+  }
 });
 
 // Live on-chain agent + bond data (paginated, cached 5s)
@@ -291,7 +305,10 @@ app.listen(config.PORT, () => {
   console.log(`    POST /api/verdicts          (consumer pushes verdicts)`);
   console.log(`    POST /admin/fault           (set fault mode)`);
   console.log(`    POST /admin/fault/reset     (clear fault mode)`);
+  console.log(`    GET  /api/attest            (TDX DCAP quote — real if USE_REAL_PHALA=true)`);
+  console.log(`    GET  /api/chain-stats       (on-chain bond + agent state)`);
   console.log(`    GET  /api/price             (x402-gated)\n`);
+  console.log(`  Attestation: USE_REAL_PHALA=${config.USE_REAL_PHALA} PHALA_ENDPOINT=${config.PHALA_ENDPOINT}`);
 });
 
 module.exports = app;
