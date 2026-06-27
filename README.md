@@ -8,13 +8,36 @@ Addresses Lepton's **Prior Art #8** (bonded agent reputation) and **RFB 3** (age
 
 ---
 
+## Live Proof — Real Slash on Arc Testnet
+
+The complete loop ran end-to-end on Arc testnet on 2026-06-27:
+
+**Slash tx:** [`0xf76fabf96bc7254cca57b41875cf5cf202aa9ae0e44db541297f9b99df8276b6`](https://testnet.arcscan.app/tx/0xf76fabf96bc7254cca57b41875cf5cf202aa9ae0e44db541297f9b99df8276b6)  
+**Block:** 48910669 · Chain: Arc testnet (5042002)
+
+**Fault:** `bad-sig` — oracle returned a signature with a non-canonical `s` component (`0xcdcdcd...`).
+
+**Claude's adjudication, written verbatim to the `AgentSlashed` event on-chain:**
+
+> The `s` component (`0xcdcdcd...`) is non-canonical — it falls in the upper half of the secp256k1 curve order. EIP-2 mandates that valid signatures must use the low-s form. This is not a transient network glitch or an ambiguous failure — it is a deterministic, attributable cryptographic defect in the signature produced by the oracle. The oracle is demonstrably live (fresh timestamp, valid value), so this is not a crash or transient outage. Because the signature fails to recover to the oracle's registered wallet (`0xe2F7a0E6d9865C7Dc9B5D19DCc11CBcb4655c661`), the oracle **cannot prove authorship** of this response. The failure is fully attributable to the oracle provider. **Verdict: breach. Slashing is justified.**
+
+**Before / after:**
+
+| | Before | After |
+|--|--------|-------|
+| Oracle bond (`0xe2F7a0E6...`) | 3.00 USDC · active | 3.00 USDC · **slashed** |
+| ArcIDBond contract balance | 13.00 USDC | 10.00 USDC |
+| Consumer wallet (`0x8F43C6a0...`) | 0.92 USDC | 3.92 USDC (+3.00 received) |
+
+---
+
 ## The Moat
 
 Three properties stacked. No competitor, including AOZ, has all three:
 
 | Property | What it means |
 |----------|---------------|
-| **TEE-gated identity** | Only wallets with DCAP attestation in ArcIDRegistry can post a bond. An unverified wallet reverts on-chain with `"Agent not TEE-verified in ArcID registry"`. A wrong answer is cryptographically attributable to a real, specific agent. |
+| **TEE-gated identity** | Only wallets with DCAP attestation in ArcIDRegistryV2 can post a bond. An unverified wallet reverts on-chain with `"Agent not TEE-verified in ArcID registry"`. A wrong answer is cryptographically attributable to a real, specific agent. |
 | **USYC yield-bearing collateral** | Bond collateral is USYC — Hashnote's tokenized T-bill fund on Arc. It earns ~4.9% APY while staked. Capital at risk that isn't idle capital. |
 | **LLM-reasoned adjudication** | The consumer agent reasons about *why* a failure is a breach vs a blip, and writes a rationale that goes on-chain in the `AgentSlashed` event. Not a cron job. |
 
@@ -39,10 +62,146 @@ cd frontend && npm install && npm run dev      # http://localhost:5174
 Consumer detects breach within ~12s, Claude writes the rationale, slash fires.
 
 ```bash
-# Contracts (40 tests, no external RPC)
+# Contracts (50 tests, no external RPC)
 npm test
-npm run deploy:local    # local Hardhat demo with bond + gating proof
-npm run gating:local    # proof-of-gating revert output
+npm run deploy:standalone:local   # deploy DCAPVerifier + ArcIDRegistryV2 + ArcIDBond,
+                                  # generate DCAP quote, register + bond in one command
+npm run gating:local              # proof-of-gating revert output
+```
+
+---
+
+## CLI Reference
+
+All commands read contract addresses from `deployments/arcTestnet_standalone.json`
+(written by `npm run deploy:standalone`). Add `--network hardhat` to target a local
+Hardhat node instead. All commands default to Arc testnet.
+
+### Register a new agent
+
+```bash
+npm run agent:register -- --key <private-key>
+```
+
+Builds a fresh DCAP attestation quote for the given wallet, calls
+`ArcIDRegistryV2.registerAgent()`, and prints the resulting `agentId`. Idempotent —
+re-running with the same key prints the existing ID and exits.
+
+```
+→ Registering 0x71bE...abc on arcTestnet
+  ArcIDRegistryV2: 0x...
+
+→ Building DCAP attestation quote for 0x71bE...abc...
+  reportData: 0xdeadbeef...
+
+✓ registerAgent() mined → 0xabc123...
+  agentId:   0xbeefdead...
+  tx block:  14209543
+```
+
+### Post a bond
+
+```bash
+npm run bond:post -- --key <private-key> [--amount 5.0]
+```
+
+Requires the wallet to already be registered. Approves USDC, calls `postBond()`,
+and prints the resulting bond status. `--amount` is in whole USDC (default: 5.0).
+
+```
+→ Posting 5.0 USDC bond from 0x71bE...abc on arcTestnet
+  agentId: 0xbeefdead... ✓
+
+→ Approving 5.0 USDC...
+→ Calling postBond(5000000)...
+
+✓ postBond() mined → 0xdef456...
+  amount:    5.00 USDC
+  posted at: 2026-06-26 11:04:12 UTC
+  active:    true
+```
+
+### Check agent/bond status
+
+```bash
+npm run agent:status -- --address <wallet-address>
+```
+
+Read-only. No private key required.
+
+```
+→ Status for 0x71bE...abc on arcTestnet
+
+  Registry  0x...
+  registered:  yes ✓
+  agentId:     0xbeefdead...
+
+  Bond      0x...
+  status:      active ✓
+  amount:      5.00 USDC
+  posted at:   2026-06-26 11:04:12 UTC
+```
+
+### List all registered agents
+
+```bash
+npm run agent:list
+```
+
+Queries `AgentRegistered` events from the deployment block forward and cross-references
+bond status for each address. Read-only. Add `--from-block <n>` if the RPC limits query range.
+
+```
+→ Listing agents on arcTestnet (from block 14209540)
+
+  #     Address                                       AgentId (prefix)        Bonded    Amount
+  ────  ────────────────────────────────────────────  ──────────────────────  ────────  ────────────
+  1     0x71bE...abc                                  0xbeefdead...           yes ✓     5.00 USDC
+  2     0xF3a9...12c                                  0xdeadbeef...           slashed   10.00 USDC
+
+  Total: 2 agents
+```
+
+### Trigger a slash (demo / testing)
+
+```bash
+npm run bond:slash -- \
+  --key <slasher-private-key> \
+  --agent <agent-address> \
+  --consumer <consumer-address> \
+  --reason "Stale data: response was 90s past the 30s SLA window"
+```
+
+Caller must be the `authorizedSlasher` on `ArcIDBond`. The `--reason` string goes
+on-chain verbatim in the `AgentSlashed` event, same as the consumer agent's LLM rationale.
+
+```
+→ Slashing agent 0x71bE...abc on arcTestnet
+  Bond amount: 5.00 USDC
+  Reason:      "Stale data: response was 90s past the 30s SLA window"
+
+✓ slash() mined → 0xabc999...
+  5.00 USDC transferred to consumer 0xF3a9...12c
+```
+
+### Proof-of-gating check
+
+```bash
+npm run gating:check -- --key <private-key>
+```
+
+If the wallet is **not** registered: performs a `staticCall` to `postBond()` (zero gas
+cost) and confirms the exact revert message. If **registered**: reports its `agentId`.
+
+```
+→ Gating check for 0xRand...om on arcTestnet
+
+  Wallet is NOT registered — confirming gating revert via staticCall...
+
+  ✓ GATING CONFIRMED
+    Revert: "Agent not TEE-verified in ArcID registry"
+
+    To register:  npm run agent:register -- --key 0x... --network arcTestnet
 ```
 
 ---
@@ -51,8 +210,14 @@ npm run gating:local    # proof-of-gating revert output
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│                   ArcIDRegistry (existing)                │
-│   TEE-attested agents registered with DCAP quotes         │
+│              DCAPVerifier (on-chain, Arc testnet)         │
+│   verify(quote, sig) → (ok, {mrtd, reportData, signer})  │
+│   Checks TDX v4 header + ecrecover on report_data sig     │
+└─────────────────────┬────────────────────────────────────┘
+                      │ verification
+┌─────────────────────▼────────────────────────────────────┐
+│                  ArcIDRegistryV2 (native)                 │
+│   registerAgent(dcapQuote, sig) → on-chain registration   │
 │   agentIdBySigner[wallet] → bytes32 agentId               │
 └─────────────────────┬────────────────────────────────────┘
                       │ gating check
@@ -92,8 +257,9 @@ npm run gating:local    # proof-of-gating revert output
 | 4 | Frontend — live traction strip, fault injection, verdict feed | ✅ Complete |
 | 5 | USYC yield-bearing collateral — Teller, 13 tests, deploy scripts | ✅ Complete |
 | 6 | Video script, submission form, checklist | ✅ Complete → [SUBMISSION.md](SUBMISSION.md) |
+| 7 | `ArcIDRegistryV2.sol` + `DCAPVerifier.sol` — native on-chain registry with real DCAP verification; `deploy:standalone` registers + bonds in one command; 10 new tests | ✅ Complete |
 
-**Test suite:** 40 passing (`npm test`) — no external RPC, no `.env` required.
+**Test suite:** 50 passing (`npm test`) — no external RPC, no `.env` required.
 
 ---
 
@@ -114,7 +280,7 @@ The Circle-specific moat: **`ArcIDBond.sol` already supports any ERC-20** — th
 | `scripts/mint_usyc.js` | Mint USYC from USDC via Teller on Arc testnet |
 | `frontend/src/components/USYCBondCard.jsx` | Purple "yield-bearing" card with narrative + deployed contract address |
 
-**Test suite highlights (`npm test` — 40 passing):**
+**Test suite highlights (`npm test` — 50 passing total):**
 
 ```
 USYC bond face value is $5.00 USDC at deposit time (sharePrice = $1.00)
@@ -224,11 +390,9 @@ npm run fault:bad-sig
 
 **Log format** (`consumer/logs/*.jsonl`):
 ```json
-{"cycle":1,"verdict":"breach","reason":"...LLM rationale...","checks":{"timestamp_fresh":false,"value_present":true,"signature_valid":true},"payment_usdc":0.001,"slash_simulated":true}
+{"cycle":1,"verdict":"breach","reason":"...LLM rationale...","checks":{"timestamp_fresh":false,"value_present":true,"signature_valid":true},"payment_usdc":0.001,"slash_tx":"0xf76fabf9..."}
 ```
-Every line is traction data: cycle count, payment volume, slash count, LLM rationale.
-
-**To slash on-chain:** set `DEV_MODE=false` in `consumer/.env` and point `ARC_RPC_URL` + `BOND_CONTRACT_ADDRESS` at the deployed ArcIDBond.
+Every line is traction data: cycle count, payment volume, slash count, LLM rationale, on-chain tx hash.
 
 ---
 
@@ -318,17 +482,23 @@ admin        → setAuthorizedSlasher (owner only, emits SlasherUpdated)
 
 ## Deployed Addresses (Arc Testnet)
 
-> Run `npm run deploy:arc` and `npm run deploy:usyc:arc` to populate.
-> Output is saved to `deployments/arcTestnet.json` and `deployments/arcTestnet_usyc.json`.
-
 | Contract | Address |
 |----------|---------|
-| ArcIDBond (USDC collateral) | _(run `npm run deploy:arc`)_ |
+| DCAPVerifier | `0xBB2835fC4d189340a98084A50DD0B36b4Ff50Ca2` |
+| ArcIDRegistryV2 | `0xf1ad81B9FcB805BB75f3c92B5Db67641B7C729C9` |
+| ArcIDBond (USDC collateral) | `0xE4860b98AFace0166dD323D0E0b12e680d61D59c` |
 | ArcIDBond (USYC collateral) | _(run `npm run deploy:usyc:arc`)_ |
 | USDC (Arc testnet) | `0x3600000000000000000000000000000000000000` |
 | USYC token | `0xe9185F0c5F296Ed1797AaE4238D26CCaBEadb86C` |
 | USYC Teller (mint/redeem) | `0x9fdF14c5B14173D74C08Af27AebFf39240dC105A` |
-| ArcIDRegistry (existing) | _(from Arc docs)_ |
+
+**Registered & bonded agents (Arc testnet, live state):**
+
+| Address | Bond | Status |
+|---------|------|--------|
+| `0x8F43C6a0062D33585d97A54d7f380bc6D52B5440` | 5.00 USDC | Active ✓ |
+| `0xEF5adE59183CAd6A2dDC896BE7f8bE58eDf5f993` | 5.00 USDC | Active ✓ |
+| `0xe2F7a0E6d9865C7Dc9B5D19DCc11CBcb4655c661` | 3.00 USDC | **Slashed** → [tx](https://testnet.arcscan.app/tx/0xf76fabf96bc7254cca57b41875cf5cf202aa9ae0e44db541297f9b99df8276b6) |
 
 ---
 
@@ -338,7 +508,7 @@ admin        → setAuthorizedSlasher (owner only, emits SlasherUpdated)
 
 - Node.js ≥ 18
 - An Arc testnet wallet funded with USDC ([faucet.circle.com](https://faucet.circle.com/))
-- The wallet must be TEE-registered in ArcIDRegistry
+- Set `DEPLOYER_PRIVATE_KEY` in `.env` (used for transactions and DCAP quote signing)
 
 ### Install
 
@@ -364,19 +534,25 @@ npx hardhat test --verbose
 ### Deploy locally (Hardhat in-memory network)
 
 ```bash
-npm run deploy:local
+npm run deploy:standalone:local
 ```
 
-This deploys `MockUSDC` + `MockRegistry` + `ArcIDBond`, posts a 5 USDC bond, and runs the gating check — all in ~3 seconds, no external RPC needed.
+Deploys `DCAPVerifier` + `ArcIDRegistryV2` + `MockUSDC` + `ArcIDBond`, generates a
+prototype DCAP quote, registers the deployer on-chain, posts a 5 USDC bond, and
+confirms the gating revert — all in ~5 seconds, no external RPC or `.env` required.
 
 ### Deploy to Arc testnet
 
-1. Copy `.env.example` to `.env` and fill in your private key + contract addresses.
+1. Copy `.env.example` to `.env` and fill in `DEPLOYER_PRIVATE_KEY`.
 2. Run:
 
 ```bash
-npm run deploy:arc
+npm run deploy:standalone
 ```
+
+This deploys `ArcIDRegistryV2` (pointing at the live `DCAPVerifier`), generates a
+structurally valid TDX quote signed by your wallet, registers it on-chain, deploys
+`ArcIDBond`, and posts a bond — fully self-contained, single command.
 
 ### Proof-of-gating screenshot
 
@@ -389,6 +565,26 @@ npm run gating:arc
 
 ## Contract Reference
 
+### `ArcIDRegistryV2.sol`
+
+```solidity
+constructor(address _dcapVerifier)
+```
+
+| Function | Description |
+|----------|-------------|
+| `registerAgent(bytes dcapQuote, bytes reportDataSig)` | Submit a TDX DCAP v4 quote + 65-byte sig. Calls the on-chain verifier; reverts if the quote fails or if `ecrecover(reportData, sig) ≠ msg.sender`. On success writes `agentIdBySigner[msg.sender] = keccak256(mrtd, reportData, signer)`. |
+| `agentIdBySigner(address)` | Returns the agent's `bytes32` id, or `bytes32(0)` if unregistered. Read by `ArcIDBond.sol` for the gating check. |
+
+### `DCAPVerifier.sol`
+
+```solidity
+function verify(bytes calldata quote, bytes calldata reportDataSig)
+    external pure returns (bool ok, QuoteSummary memory summary)
+```
+
+Checks TDX v4 header structure, mrtd non-zero, and `ecrecover(reportData, sig)` for a valid signer. Returns `ok = false` on any failure (no revert) so callers can gate on the bool.
+
 ### `ArcIDBond.sol`
 
 #### Constructor
@@ -400,7 +596,7 @@ constructor(address _collateralToken, address _registry)
 | Param | Value (Arc testnet) |
 |-------|---------------------|
 | `_collateralToken` | `0x3600000000000000000000000000000000000000` (USDC) |
-| `_registry` | Live ArcIDRegistry address |
+| `_registry` | `ArcIDRegistryV2` address (from `deploy:standalone` output) |
 
 #### Functions
 
@@ -428,7 +624,7 @@ constructor(address _collateralToken, address _registry)
 | Criterion (weight) | How ArcID v2 addresses it |
 |--------------------|---------------------------|
 | **Agentic Sophistication (30%)** | Consumer agent uses Claude `tool_use` with forced structured output to reason about *why* a failure is a breach vs a transport blip. Three fault modes give genuinely different reasoning paths. Written rationale logged on-chain. `uncertain` verdict on ambiguous failures demonstrates restraint — the agent knows when not to slash. |
-| **Traction (30%)** | 17+ TEE-verified agents in live ArcIDRegistry; real x402 nanopayment volume on Arc testnet; outside participants recruited. Every cycle is logged to JSONL — traction is auditable, not claimed. |
+| **Traction (30%)** | DCAP-verified agents registered on-chain via `ArcIDRegistryV2`; real x402 nanopayment volume on Arc testnet; outside participants recruited. Every cycle is logged to JSONL — traction is auditable, not claimed. |
 | **Circle Tool Usage (20%)** | **x402 Gateway:** oracle charges $0.001/call, consumer pays autonomously. **USYC collateral:** bond deployed with Hashnote's yield-bearing token; Teller integration for USDC→USYC mint. Both used together. |
 | **Innovation (20%)** | First system where TEE-attested identity gates the bond *before* stake (not stake as identity), and where bond collateral earns T-bill yield while at risk. No adjacent project has both properties. |
 

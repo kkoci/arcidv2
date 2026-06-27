@@ -6,16 +6,25 @@ const s = {
   sub:    { fontSize: "10px", color: "#6b6b8a", marginTop: "2px" },
 };
 
-export default function TractionStrip({ stats, loading }) {
+export default function TractionStrip({ stats, chainStats, loading }) {
   if (loading) return <div style={{ ...s.cell, textAlign: "center", color: "#6b6b8a" }}>connecting…</div>;
+
+  // Prefer on-chain data from chainStats; fall back to oracle in-memory stats
+  const activeAgents = chainStats?.summary?.activeAgents ?? stats.activeBonds ?? "—";
+  const tvlRaw       = chainStats?.summary?.tvlUsdc;
+  const tvlDisplay   = tvlRaw != null
+    ? `$${(Number(tvlRaw) / 1e6).toFixed(2)}`
+    : "—";
+  const slashCount   = chainStats?.summary?.totalSlashes ?? stats.slashCount ?? 0;
 
   return (
     <div style={s.strip}>
-      <Stat label="Bonded Agents"   value={stats.activeBonds ?? "—"}  sub="on Arc testnet" />
-      <Stat label="Total Calls"     value={stats.totalCalls ?? 0}      sub="x402 nanopayments" />
-      <Stat label="Volume"          value={`$${(stats.totalVolumeUSDC ?? 0).toFixed(4)}`} sub="USDC paid" color="#22d3ee" />
-      <Stat label="OK Verdicts"     value={stats.okCount ?? 0}          sub="adjudicator restrained" color="#22c55e" />
-      <Stat label="Slash Events"    value={stats.slashCount ?? 0}        sub="bonds seized" color={stats.slashCount > 0 ? "#ef4444" : undefined} />
+      <Stat label="Bonded Agents"   value={activeAgents}                   sub="TEE-verified on Arc" />
+      <Stat label="Bond TVL"        value={tvlDisplay}                     sub="USDC in ArcIDBond"   color="#22d3ee" />
+      <Stat label="Total Calls"     value={stats.totalCalls ?? 0}          sub="x402 nanopayments" />
+      <Stat label="OK Verdicts"     value={stats.okCount ?? 0}             sub="adjudicator restrained" color="#22c55e" />
+      <Stat label="Slash Events"    value={slashCount}                     sub="bonds seized on-chain"
+            color={slashCount > 0 ? "#ef4444" : undefined} />
     </div>
   );
 }

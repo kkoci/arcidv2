@@ -66,11 +66,16 @@ async function fetchOraclePrice(faultMode = null) {
  * Production: would call Circle Gateway and return the signed receipt.
  */
 async function buildPaymentHeader(paymentOptions) {
-  if (config.DEV_MODE) {
-    // Dev stub — oracle accepts any non-empty X-Payment in DEV_MODE=true
+  const isLocalOracle =
+    config.ORACLE_URL.includes("localhost") ||
+    config.ORACLE_URL.includes("127.0.0.1");
+
+  if (config.DEV_MODE || isLocalOracle) {
+    // Dev stub — a localhost oracle always runs with DEV_MODE=true and accepts
+    // any non-empty X-Payment header, so the stub is always correct here.
     return JSON.stringify({
       scheme: "exact",
-      network: config.ORACLE_URL.includes("localhost") ? "dev" : "arc-testnet",
+      network: isLocalOracle ? "dev" : "arc-testnet",
       payload: "dev-payment-" + Date.now(),
       payer: config.CONSUMER_WALLET_ADDRESS,
     });

@@ -1,0 +1,22 @@
+{
+  "network": "arcTestnet",
+  "chainId": 5042002,
+  "deployer": "0x8F43C6a0062D33585d97A54d7f380bc6D52B5440",
+  "timestamp": 1782520630,
+  "deployBlock": 48894041,
+  "addresses": {
+    "DCAPVerifier": "0xBB2835fC4d189340a98084A50DD0B36b4Ff50Ca2",
+    "ArcIDRegistryV2": "0xf1ad81B9FcB805BB75f3c92B5Db67641B7C729C9",
+    "ArcIDBond": "0xE4860b98AFace0166dD323D0E0b12e680d61D59c",
+    "collateralToken": "0x3600000000000000000000000000000000000000"
+  },
+  "registeredAgent": {
+    "address": "0x8F43C6a0062D33585d97A54d7f380bc6D52B5440",
+    "agentId": "0x0f427dea2b2ade0457f383d7fb5945a1ba8377cdc856633bc3f426b900a43bb6"
+  },
+  "bondStats": {
+    "amount": "5000000",
+    "is_active": true,
+    "gating_revert_confirmed": true
+  }
+}

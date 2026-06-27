@@ -12,6 +12,15 @@
     "mint:usyc:arc":      "hardhat run scripts/mint_usyc.js --network arcTestnet",
     "gating:local":       "hardhat run scripts/verify_gating.js --network hardhat",
     "gating:arc":         "hardhat run scripts/verify_gating.js --network arcTestnet",
+    "deploy:standalone":       "hardhat run scripts/deploy_standalone.js --network arcTestnet",
+    "deploy:standalone:local": "hardhat run scripts/deploy_standalone.js --network hardhat",
+    "deploy:standalone:node":  "hardhat run scripts/deploy_standalone.js --network localhost",
+    "agent:register":     "node scripts/cli/register.js",
+    "agent:status":       "node scripts/cli/status.js",
+    "agent:list":         "node scripts/cli/list-agents.js",
+    "bond:post":          "node scripts/cli/post-bond.js",
+    "bond:slash":         "node scripts/cli/slash.js",
+    "gating:check":       "node scripts/cli/gating-check.js",
     "node":               "hardhat node"
   },
   "devDependencies": {

@@ -4,12 +4,13 @@
   "description": "ArcID Oracle — x402 nanopayment-gated price feed with TEE-attested signatures",
   "main": "src/index.js",
   "scripts": {
-    "start":   "node src/index.js",
-    "dev":     "node --watch src/index.js"
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
   },
   "dependencies": {
-    "dotenv":  "^16.4.5",
-    "ethers":  "^6.13.2",
+    "@anthropic-ai/sdk": "^0.106.0",
+    "dotenv": "^16.4.5",
+    "ethers": "^6.13.2",
     "express": "^4.21.0",
     "x402-express": "^0.5.0"
   },

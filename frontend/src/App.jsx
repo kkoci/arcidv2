@@ -17,7 +17,7 @@ const s = {
              boxShadow:  live ? "0 0 0 3px #22c55e30" : "none",
              display: "inline-block", marginRight: "6px" }),
   liveTag: { fontSize: "10px", color: "#6b6b8a" },
-  main:    { flex: 1, display: "grid", gridTemplateColumns: "340px 1fr",
+  main:    { flex: 1, display: "grid", gridTemplateColumns: "360px 1fr",
              gap: "16px", padding: "16px 24px", maxWidth: "1400px", width: "100%", margin: "0 auto" },
   left:    { display: "flex", flexDirection: "column", gap: "16px" },
   section: { fontSize: "10px", color: "#6b6b8a", textTransform: "uppercase",
@@ -30,21 +30,24 @@ const s = {
 };
 
 export default function App() {
-  const [stats,    setStats]    = useState(null);
-  const [verdicts, setVerdicts] = useState([]);
-  const [loading,  setLoading]  = useState(true);
-  const [live,     setLive]     = useState(false);
-  const [lastPoll, setLastPoll] = useState(null);
+  const [stats,      setStats]      = useState(null);
+  const [chainStats, setChainStats] = useState(null);
+  const [verdicts,   setVerdicts]   = useState([]);
+  const [loading,    setLoading]    = useState(true);
+  const [live,       setLive]       = useState(false);
+  const [lastPoll,   setLastPoll]   = useState(null);
   const timerRef = useRef(null);
 
   async function poll() {
     try {
-      const [sRes, vRes] = await Promise.all([
+      const [sRes, vRes, cRes] = await Promise.all([
         fetch("/api/stats"),
         fetch("/api/verdicts"),
+        fetch("/api/chain-stats"),
       ]);
       if (sRes.ok) setStats(await sRes.json());
       if (vRes.ok) setVerdicts((await vRes.json()).verdicts ?? []);
+      if (cRes.ok) setChainStats(await cRes.json());
       setLive(true);
     } catch {
       setLive(false);
@@ -77,38 +80,42 @@ export default function App() {
         </div>
       </div>
 
-      {/* Traction strip */}
-      <TractionStrip stats={stats ?? {}} loading={loading} />
+      {/* Traction strip — chain data where available, oracle counters as fallback */}
+      <TractionStrip stats={stats ?? {}} chainStats={chainStats} loading={loading} />
 
       {/* Body */}
       <div style={s.main}>
-        {/* Left column: oracle agent card + system info */}
+        {/* Left column */}
         <div style={s.left}>
           <div>
-            <div style={s.section}>Bonded Agent</div>
-            <AgentCard stats={stats} />
+            <div style={s.section}>Registered Agents (on-chain)</div>
+            <AgentCard
+              stats={stats}
+              chainStats={chainStats}
+              onCycleComplete={poll}
+            />
           </div>
 
           <div>
             <div style={s.section}>System</div>
             <div style={s.infoBox}>
-              <InfoRow k="Chain"    v="Arc testnet (421614)" />
-              <InfoRow k="Protocol" v="x402 nanopayments" />
-              <InfoRow k="Collateral" v="USDC ERC-20" />
-              <InfoRow k="TEE gate" v="ArcIDRegistry" />
+              <InfoRow k="Chain"       v="Arc testnet (5042002)" />
+              <InfoRow k="Protocol"    v="x402 nanopayments" />
+              <InfoRow k="Collateral"  v="USDC (native token)" />
+              <InfoRow k="Registry"    v="ArcIDRegistryV2 + DCAP" />
               <InfoRow k="Adjudicator" v="Claude Sonnet 4.6" />
-              <InfoRow k="Slash type" v="DEV (simulated)" />
-              <InfoRow k="Consumer" v={stats?.consumer ?? "—"} />
+              <InfoRow k="Slash type"  v="On-chain (real USDC)" />
+              <InfoRow k="Consumer"    v={stats?.consumer ?? "0x8F43C6a0..."} />
             </div>
           </div>
 
-          {stats?.breachCount > 0 && (
+          {chainStats?.summary?.totalSlashes > 0 && (
             <div>
-              <div style={s.section}>Breach summary</div>
+              <div style={s.section}>Chain summary</div>
               <div style={s.infoBox}>
-                <InfoRow k="Breaches"   v={stats.breachCount}   />
-                <InfoRow k="Uncertain"  v={stats.uncertainCount} />
-                <InfoRow k="Slashes"    v={stats.slashCount}     />
+                <InfoRow k="Total agents"   v={chainStats.summary.totalAgents}   />
+                <InfoRow k="Active bonds"   v={chainStats.summary.activeAgents}  />
+                <InfoRow k="Total slashes"  v={chainStats.summary.totalSlashes}  />
               </div>
             </div>
           )}
@@ -133,7 +140,7 @@ function InfoRow({ k, v }) {
   return (
     <div style={s.infoRow}>
       <span style={s.infoKey}>{k}</span>
-      <span style={{ ...s.infoVal, fontSize: "10px", wordBreak: "break-all", maxWidth: "180px", textAlign: "right" }}>{v}</span>
+      <span style={{ ...s.infoVal, fontSize: "10px", wordBreak: "break-all", maxWidth: "200px", textAlign: "right" }}>{v}</span>
     </div>
   );
 }

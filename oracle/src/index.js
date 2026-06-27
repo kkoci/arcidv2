@@ -17,6 +17,7 @@
 const express    = require("express");
 const config     = require("./config");
 const { signResponse } = require("./signer");
+const { getChainStats, triggerCycle } = require("./chain");
 
 const app = express();
 app.use(express.json());
@@ -141,6 +142,18 @@ app.get("/api/verdicts", (req, res) => {
   res.json({ verdicts: [...verdicts].reverse() });
 });
 
+// Live on-chain agent + bond data (paginated, cached 5s)
+app.get("/api/chain-stats", async (req, res) => {
+  try {
+    const data = await getChainStats();
+    if (!data) return res.status(503).json({ error: "Chain config not set" });
+    res.json(data);
+  } catch (e) {
+    console.error("[chain-stats]", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Consumer agent pushes a verdict after each cycle
 app.post("/api/verdicts", (req, res) => {
   const v = req.body;
@@ -169,6 +182,33 @@ app.post("/admin/fault", (req, res) => {
   activeFaultMode = mode;
   console.log(`[fault] Fault mode set: ${activeFaultMode}`);
   res.json({ ok: true, fault_mode: activeFaultMode });
+});
+
+// Trigger the full slash loop: re-bond → bad-sig → Claude → on-chain slash → recharge
+app.post("/admin/trigger-cycle", async (req, res) => {
+  if (!isFaultAllowed(req)) return res.status(403).json({ error: "Requires X-Fault-Token" });
+  console.log("[trigger-cycle] Starting slash demo loop...");
+  try {
+    const result = await triggerCycle();
+    if (result.slashTx) {
+      stats.slashCount++;
+      stats.breachCount++;
+      verdicts.push({
+        verdict:    result.verdict,
+        reason:     result.reason,
+        slash_tx:   result.slashTx,
+        fault_mode: "bad-sig",
+        triggered:  true,
+        received_at: new Date().toISOString(),
+      });
+      if (verdicts.length > MAX_VERDICTS) verdicts.shift();
+    }
+    console.log("[trigger-cycle] Done:", result.slashTx ?? "no slash");
+    res.json(result);
+  } catch (e) {
+    console.error("[trigger-cycle]", e.message);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // Admin: clear fault mode (Reset button)
