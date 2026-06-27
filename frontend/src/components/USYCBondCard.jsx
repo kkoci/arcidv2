@@ -1,26 +1,79 @@
 const s = {
-  card:      { background: "#111118", border: "1px solid #1e1e2e", borderRadius: "8px", padding: "20px" },
-  header:    { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" },
-  title:     { fontSize: "11px", color: "#6b6b8a", textTransform: "uppercase", letterSpacing: "0.1em" },
-  badgeWrap: { display: "flex", gap: "6px" },
-  badge:     (c) => ({
-    padding: "3px 10px", borderRadius: "99px", fontSize: "11px", fontWeight: "700",
-    background: c + "20", color: c, border: `1px solid ${c}40`,
-  }),
-  grid:      { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "16px" },
-  cell:      { background: "#0a0a0f", borderRadius: "6px", padding: "10px 12px" },
-  cellLabel: { fontSize: "10px", color: "#6b6b8a", textTransform: "uppercase", letterSpacing: "0.08em" },
-  cellVal:   { fontSize: "13px", marginTop: "3px" },
-  addr:      { fontSize: "10px", color: "#a855f7", wordBreak: "break-all", marginTop: "4px", fontFamily: "monospace" },
-  narrative: {
-    background: "#0d0d1a", border: "1px solid #2e2040", borderRadius: "6px",
-    padding: "12px 14px", fontSize: "11px", color: "#c4b5fd", lineHeight: "1.7",
+  card: {
+    background: "#111118",
+    border: "1px solid #1e1e2e",
+    borderLeft: "2px solid #8b5cf6",
+    borderRadius: "8px",
+    padding: "20px",
   },
-  narrativeTitle: { fontWeight: "700", color: "#a855f7", marginBottom: "4px" },
-  pill:      { display: "inline-block", fontSize: "10px", padding: "2px 8px", borderRadius: "99px",
-               background: "#a855f720", color: "#a855f7", border: "1px solid #a855f740", marginRight: "4px" },
-  link:      { color: "#a855f7", textDecoration: "none", fontSize: "10px" },
+  header: {
+    display: "flex", alignItems: "center",
+    justifyContent: "space-between", marginBottom: "14px",
+  },
+  title: {
+    fontSize: "11px", color: "#6b6b8a",
+    textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: "600",
+  },
+  badgeWrap: { display: "flex", gap: "6px" },
+  badge: (c) => ({
+    padding: "3px 10px", borderRadius: "99px", fontSize: "11px", fontWeight: "700",
+    background: c + "18", color: c, border: `1px solid ${c}40`,
+  }),
+
+  narrative: {
+    background: "rgba(139, 92, 246, 0.06)",
+    border: "1px solid rgba(139, 92, 246, 0.18)",
+    borderRadius: "6px",
+    padding: "14px 16px",
+    marginBottom: "14px",
+  },
+  narrativeTitle: {
+    fontWeight: "700", color: "#8b5cf6",
+    marginBottom: "8px", fontSize: "11px",
+    textTransform: "uppercase", letterSpacing: "0.06em",
+  },
+  narrativeBody: {
+    fontSize: "11px", color: "#c4b5fd", lineHeight: "1.75",
+  },
+  pill: {
+    display: "inline-block", fontSize: "10px", padding: "2px 8px",
+    borderRadius: "99px", background: "#8b5cf618",
+    color: "#8b5cf6", border: "1px solid #8b5cf640",
+    marginRight: "4px", marginBottom: "8px",
+  },
+
+  grid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "14px" },
+  cell: { background: "#0d1117", borderRadius: "6px", padding: "10px 12px" },
+  cellLabel: {
+    fontSize: "10px", color: "#6b6b8a",
+    textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: "600",
+  },
+  cellVal: { fontSize: "13px", marginTop: "3px", fontFamily: "'JetBrains Mono', monospace" },
+  cellSub: { fontSize: "9px", color: "#6b6b8a", marginTop: "2px", fontFamily: "'JetBrains Mono', monospace" },
+
+  addr: {
+    fontSize: "10px", color: "#8b5cf6", wordBreak: "break-all",
+    marginTop: "4px", fontFamily: "'JetBrains Mono', monospace",
+  },
+  cmdRow: {
+    display: "flex", alignItems: "center", gap: "8px",
+    padding: "8px 12px", background: "#0d1117",
+    borderRadius: "6px", border: "1px solid #1e1e2e",
+  },
+  cmdLabel: {
+    fontSize: "10px", color: "#6b6b8a", fontWeight: "600",
+    textTransform: "uppercase", letterSpacing: "0.08em",
+  },
+  cmdCode: {
+    fontSize: "11px", color: "#8b5cf6",
+    fontFamily: "'JetBrains Mono', monospace",
+  },
 };
+
+function shorten(addr) {
+  if (!addr) return "—";
+  return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
+}
 
 export default function USYCBondCard({ usyc }) {
   const bondAddr  = usyc?.bond   ?? null;
@@ -31,21 +84,42 @@ export default function USYCBondCard({ usyc }) {
   return (
     <div style={s.card}>
       <div style={s.header}>
-        <div style={s.title}>USYC Bond · Phase 5</div>
+        <div style={s.title}>Phase 5 — Yield-Bearing Bond (Circle USDC + USYC)</div>
         <div style={s.badgeWrap}>
-          <span style={s.badge("#a855f7")}>yield-bearing</span>
-          <span style={s.badge(deployed ? "#22c55e" : "#f59e0b")}>
+          <span style={s.badge("#8b5cf6")}>yield-bearing</span>
+          <span style={s.badge(deployed ? "#34d399" : "#f59e0b")}>
             {deployed ? "● deployed" : "⏳ allowlist pending"}
           </span>
         </div>
       </div>
 
+      <div style={s.narrative}>
+        <div style={s.narrativeTitle}>The Circle Differentiator</div>
+        <div style={{ marginBottom: "8px" }}>
+          <span style={s.pill}>USYC</span>
+          <span style={s.pill}>x402</span>
+          <span style={s.pill}>TEE-gated</span>
+          <span style={s.pill}>Circle USDC</span>
+        </div>
+        <div style={s.narrativeBody}>
+          Agents post <strong style={{ color: "#e2e8f0" }}>yield-bearing USYC</strong> as bond
+          collateral instead of idle USDC. The bond earns T-bill returns (~4.9% APY) while it
+          sits at stake. On a confirmed SLA breach, the consumer receives USYC — worth{" "}
+          <em style={{ color: "#e2e8f0" }}>more</em> than face value at slash time.{" "}
+          <strong style={{ color: "#e2e8f0" }}>Capital at risk that isn't idle capital.</strong>
+        </div>
+      </div>
+
       <div style={s.grid}>
-        <Cell label="Collateral token" val="USYC" sub={shorten(tokenAddr)} color="#a855f7" />
-        <Cell label="Teller"           val="Hashnote" sub={shorten(teller)} />
-        <Cell label="APY (est.)"       val="~4.9%"    sub="T-bill backed"   color="#22c55e" />
-        <Cell label="Bond contract"    val={deployed ? "deployed" : "pending allowlist"}
-              sub={deployed ? shorten(bondAddr) : "deploy:usyc:arc"} color={deployed ? "#22c55e" : "#f59e0b"} />
+        <Cell label="Collateral token" val="USYC"     sub={shorten(tokenAddr)} color="#8b5cf6" />
+        <Cell label="Teller"           val="Hashnote"  sub={shorten(teller)} />
+        <Cell label="APY (est.)"       val="~4.9%"    sub="T-bill backed"    color="#34d399" />
+        <Cell
+          label="Bond contract"
+          val={deployed ? "deployed" : "pending allowlist"}
+          sub={deployed ? shorten(bondAddr) : "deploy:usyc:arc"}
+          color={deployed ? "#34d399" : "#f59e0b"}
+        />
       </div>
 
       {deployed && (
@@ -55,22 +129,9 @@ export default function USYCBondCard({ usyc }) {
         </div>
       )}
 
-      <div style={s.narrative}>
-        <div style={s.narrativeTitle}>The Circle Differentiator</div>
-        <span style={s.pill}>USYC</span>
-        <span style={s.pill}>x402</span>
-        <span style={s.pill}>TEE-gated</span>
-        <div style={{ marginTop: "8px" }}>
-          Agents post <strong>yield-bearing</strong> USYC as bond collateral instead of idle USDC.
-          The bond earns T-bill returns (~4.9% APY) while it sits at stake.
-          On a confirmed SLA breach, the consumer receives USYC — worth <em>more</em> than
-          face value at slash time. <strong>Capital at risk that isn't idle capital.</strong>
-        </div>
-        <div style={{ marginTop: "8px", color: "#6b6b8a" }}>
-          Mint USYC via Teller: <code style={{ color: "#a855f7" }}>npm run mint:usyc:arc</code>
-          {" · "}
-          USYC allowlist required from Circle.
-        </div>
+      <div style={s.cmdRow}>
+        <span style={s.cmdLabel}>mint</span>
+        <code style={s.cmdCode}>npm run mint:usyc:arc</code>
       </div>
     </div>
   );
@@ -80,13 +141,8 @@ function Cell({ label, val, sub, color }) {
   return (
     <div style={s.cell}>
       <div style={s.cellLabel}>{label}</div>
-      <div style={{ ...s.cellVal, color: color || "#e2e2f0" }}>{val}</div>
-      {sub && <div style={{ fontSize: "9px", color: "#6b6b8a", marginTop: "2px", fontFamily: "monospace" }}>{sub}</div>}
+      <div style={{ ...s.cellVal, color: color || "#e2e8f0" }}>{val}</div>
+      {sub && <div style={s.cellSub}>{sub}</div>}
     </div>
   );
-}
-
-function shorten(addr) {
-  if (!addr) return "—";
-  return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 }

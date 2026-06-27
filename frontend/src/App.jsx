@@ -8,25 +8,48 @@ const POLL_MS = 5000;
 
 const s = {
   app:     { minHeight: "100vh", display: "flex", flexDirection: "column" },
-  topbar:  { display: "flex", alignItems: "center", justifyContent: "space-between",
-             padding: "12px 24px", borderBottom: "1px solid #1e1e2e" },
-  logo:    { fontSize: "13px", fontWeight: "700", letterSpacing: "0.08em", color: "#e2e2f0" },
-  logoSub: { fontSize: "10px", color: "#6b6b8a", marginLeft: "8px" },
-  pulse:   (live) => ({ width: "8px", height: "8px", borderRadius: "50%",
-             background: live ? "#22c55e" : "#ef4444",
-             boxShadow:  live ? "0 0 0 3px #22c55e30" : "none",
-             display: "inline-block", marginRight: "6px" }),
-  liveTag: { fontSize: "10px", color: "#6b6b8a" },
-  main:    { flex: 1, display: "grid", gridTemplateColumns: "360px 1fr",
-             gap: "16px", padding: "16px 24px", maxWidth: "1400px", width: "100%", margin: "0 auto" },
+  topbar:  {
+    display: "flex", alignItems: "center", justifyContent: "space-between",
+    padding: "12px 24px", borderBottom: "1px solid #1e1e2e",
+    background: "rgba(13, 17, 23, 0.9)",
+    backdropFilter: "blur(12px)",
+    position: "sticky", top: 0, zIndex: 100,
+  },
+  logoWrap: { display: "flex", alignItems: "center", gap: "10px" },
+  logoMark: {
+    width: "26px", height: "26px", borderRadius: "5px",
+    background: "linear-gradient(135deg, #4f46e5, #6366f1)",
+    display: "flex", alignItems: "center", justifyContent: "center",
+    flexShrink: 0,
+  },
+  logo:    { fontSize: "13px", fontWeight: "700", letterSpacing: "-0.01em", color: "#e2e8f0" },
+  logoSep: { color: "#2d2d4e", fontSize: "16px", fontWeight: "300" },
+  logoSub: { fontSize: "11px", color: "#6b6b8a" },
+  pulse:   (live) => ({
+    width: "7px", height: "7px", borderRadius: "50%",
+    background: live ? "#34d399" : "#ef4444",
+    boxShadow: live ? "0 0 0 3px rgba(52,211,153,0.25)" : "none",
+    display: "inline-block", marginRight: "6px",
+    animation: live ? "pulse 2s ease-in-out infinite" : "none",
+  }),
+  liveTag: { fontSize: "11px", color: "#6b6b8a", display: "flex", alignItems: "center" },
+  main:    {
+    flex: 1, display: "grid", gridTemplateColumns: "360px 1fr",
+    gap: "16px", padding: "16px 24px",
+    maxWidth: "1400px", width: "100%", margin: "0 auto",
+  },
   left:    { display: "flex", flexDirection: "column", gap: "16px" },
-  section: { fontSize: "10px", color: "#6b6b8a", textTransform: "uppercase",
-             letterSpacing: "0.1em", marginBottom: "8px" },
+  section: {
+    fontSize: "10px", color: "#6b6b8a", textTransform: "uppercase",
+    letterSpacing: "0.1em", marginBottom: "8px", fontWeight: "600",
+  },
   infoBox: { background: "#111118", border: "1px solid #1e1e2e", borderRadius: "8px", padding: "16px" },
-  infoRow: { display: "flex", justifyContent: "space-between", padding: "6px 0",
-             borderBottom: "1px solid #0a0a0f", fontSize: "11px" },
+  infoRow: {
+    display: "flex", justifyContent: "space-between", padding: "6px 0",
+    borderBottom: "1px solid #0d1117", fontSize: "11px",
+  },
   infoKey: { color: "#6b6b8a" },
-  infoVal: { color: "#e2e2f0" },
+  infoVal: { color: "#e2e8f0", fontFamily: "'JetBrains Mono', monospace", fontSize: "10px" },
 };
 
 export default function App() {
@@ -67,20 +90,35 @@ export default function App() {
 
   return (
     <div style={s.app}>
+      <style>{`
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.4; }
+        }
+      `}</style>
+
       {/* Top bar */}
       <div style={s.topbar}>
-        <div>
+        <div style={s.logoWrap}>
+          <div style={s.logoMark}>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M3 11L7 3L11 11" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M4.5 8.5H9.5" stroke="white" strokeWidth="1.2" strokeLinecap="round"/>
+            </svg>
+          </div>
           <span style={s.logo}>ArcID</span>
-          <span style={s.logoSub}>bonded agent reputation · Arc testnet</span>
+          <span style={s.logoSep}>·</span>
+          <span style={s.logoSub}>reputation you post as collateral, not a score you ask to be trusted</span>
         </div>
         <div style={s.liveTag}>
           <span style={s.pulse(live)} />
-          {live ? `live · refreshes ${POLL_MS / 1000}s` : "disconnected"}
-          {lastPoll && ` · ${lastPoll.toLocaleTimeString()}`}
+          {live
+            ? `live · refreshes ${POLL_MS / 1000}s${lastPoll ? ` · ${lastPoll.toLocaleTimeString()}` : ""}`
+            : "disconnected"}
         </div>
       </div>
 
-      {/* Traction strip — chain data where available, oracle counters as fallback */}
+      {/* Traction strip */}
       <TractionStrip stats={stats ?? {}} chainStats={chainStats} loading={loading} />
 
       {/* Body */}
@@ -89,11 +127,7 @@ export default function App() {
         <div style={s.left}>
           <div>
             <div style={s.section}>Registered Agents (on-chain)</div>
-            <AgentCard
-              stats={stats}
-              chainStats={chainStats}
-              onCycleComplete={poll}
-            />
+            <AgentCard stats={stats} chainStats={chainStats} onCycleComplete={poll} />
           </div>
 
           <div>
@@ -101,9 +135,9 @@ export default function App() {
             <div style={s.infoBox}>
               <InfoRow k="Chain"       v="Arc testnet (5042002)" />
               <InfoRow k="Protocol"    v="x402 nanopayments" />
-              <InfoRow k="Collateral"  v="USDC (native token)" />
+              <InfoRow k="Collateral"  v="USDC / USYC" />
               <InfoRow k="Registry"    v="ArcIDRegistryV2 + DCAP" />
-              <InfoRow k="Adjudicator" v="Claude Sonnet 4.6" />
+              <InfoRow k="Adjudicator" v="Claude Sonnet 4.6" highlight />
               <InfoRow k="Slash type"  v="On-chain (real USDC)" />
               <InfoRow k="Consumer"    v={stats?.consumer ?? "0x8F43C6a0..."} />
             </div>
@@ -113,9 +147,9 @@ export default function App() {
             <div>
               <div style={s.section}>Chain summary</div>
               <div style={s.infoBox}>
-                <InfoRow k="Total agents"   v={chainStats.summary.totalAgents}   />
-                <InfoRow k="Active bonds"   v={chainStats.summary.activeAgents}  />
-                <InfoRow k="Total slashes"  v={chainStats.summary.totalSlashes}  />
+                <InfoRow k="Total agents"  v={chainStats.summary.totalAgents} />
+                <InfoRow k="Active bonds"  v={chainStats.summary.activeAgents} />
+                <InfoRow k="Total slashes" v={chainStats.summary.totalSlashes} red />
               </div>
             </div>
           )}
@@ -126,7 +160,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* Right column: verdict feed */}
+        {/* Right column */}
         <div>
           <div style={s.section}>Adjudication feed</div>
           <VerdictHistory verdicts={sorted} />
@@ -136,11 +170,15 @@ export default function App() {
   );
 }
 
-function InfoRow({ k, v }) {
+function InfoRow({ k, v, highlight, red }) {
   return (
     <div style={s.infoRow}>
       <span style={s.infoKey}>{k}</span>
-      <span style={{ ...s.infoVal, fontSize: "10px", wordBreak: "break-all", maxWidth: "200px", textAlign: "right" }}>{v}</span>
+      <span style={{
+        ...s.infoVal,
+        color: highlight ? "#8b5cf6" : red ? "#ef4444" : "#e2e8f0",
+        wordBreak: "break-all", maxWidth: "200px", textAlign: "right",
+      }}>{v}</span>
     </div>
   );
 }
