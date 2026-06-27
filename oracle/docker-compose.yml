@@ -1,0 +1,13 @@
+services:
+  oracle:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    platform: linux/amd64
+    ports:
+      - "3001:3001"
+    env_file:
+      - .env
+    environment:
+      PORT: "3001"
+      USE_REAL_PHALA: "false"

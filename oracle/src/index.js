@@ -200,7 +200,6 @@ app.post("/admin/fault", (req, res) => {
 
 // Trigger the full slash loop: re-bond → bad-sig → Claude → on-chain slash → recharge
 app.post("/admin/trigger-cycle", async (req, res) => {
-  if (!isFaultAllowed(req)) return res.status(403).json({ error: "Requires X-Fault-Token" });
   console.log("[trigger-cycle] Starting slash demo loop...");
   try {
     const result = await triggerCycle();

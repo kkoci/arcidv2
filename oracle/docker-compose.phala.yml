@@ -1,0 +1,23 @@
+services:
+  oracle:
+    image: kkoci/arcid2-oracle:latest
+    platform: linux/amd64
+    ports:
+      - "3001:3001"
+    environment:
+      PORT: "3001"
+      USE_REAL_PHALA: "true"
+      PHALA_ENDPOINT: "http://127.0.0.1:9000"
+      # Injected via Phala Cloud dashboard (Secrets tab) — do not commit values here:
+      ORACLE_PRIVATE_KEY: "${ORACLE_PRIVATE_KEY}"
+      ORACLE_WALLET_ADDRESS: "${ORACLE_WALLET_ADDRESS}"
+      ARC_RPC_URL: "${ARC_RPC_URL}"
+      BOND_CONTRACT_ADDRESS: "${BOND_CONTRACT_ADDRESS}"
+      REGISTRY_ADDRESS: "${REGISTRY_ADDRESS}"
+      DEPLOY_BLOCK: "${DEPLOY_BLOCK}"
+      CONSUMER_PRIVATE_KEY: "${CONSUMER_PRIVATE_KEY}"
+      CONSUMER_WALLET_ADDRESS: "${CONSUMER_WALLET_ADDRESS}"
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY}"
+      DEV_MODE: "false"
+      ARC_NETWORK: "arc-testnet"
+      MAX_AGE_SECONDS: "30"
