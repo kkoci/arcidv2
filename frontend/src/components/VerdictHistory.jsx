@@ -1,170 +1,154 @@
 const ARCSCAN = "https://testnet.arcscan.app/tx/";
 
-function verdictHeadline(v) {
+function headline(v) {
+  const c = v.checks ?? {};
   if (v.verdict === "breach") {
-    const c = v.checks ?? {};
-    if (c.signature_valid === false) return "Oracle submitted a forged signature";
-    if (c.timestamp_fresh === false) return "Oracle response was stale";
-    if (c.value_present   === false) return "Oracle returned null data";
+    if (c.signature_valid === false) return "Forged signature detected";
+    if (c.timestamp_fresh === false) return "Stale response detected";
+    if (c.value_present   === false) return "Null data — oracle delivered nothing";
     return "SLA breach confirmed";
   }
-  if (v.verdict === "ok") return "Oracle delivered a valid signed response";
+  if (v.verdict === "ok") return "Valid signed response — SLA met";
   return "Insufficient evidence";
 }
 
 export default function VerdictHistory({ verdicts }) {
-  if (verdicts.length === 0) {
-    return (
-      <div style={{
-        display: "flex", flexDirection: "column",
-        alignItems: "center", justifyContent: "center",
-        padding: "80px 40px", textAlign: "center",
-        border: "1px dashed #1a1b2e", borderRadius: "12px",
-        minHeight: "400px",
-      }}>
-        <div style={{
-          fontSize: "48px", marginBottom: "20px",
-          filter: "grayscale(0.3)",
-        }}>⚡</div>
-        <div style={{ fontSize: "20px", fontWeight: "800", color: "#e8eaf6", marginBottom: "10px", letterSpacing: "-0.01em" }}>
-          No adjudications yet
-        </div>
-        <div style={{ fontSize: "13px", color: "#5c5f7a", lineHeight: "1.8", maxWidth: "340px" }}>
-          Click <span style={{ color: "#ef4444", fontWeight: "700" }}>"Oracle cheated. Slash it."</span> on the right.<br />
-          Claude will read the evidence, decide the verdict,<br />
-          and slash the bond on-chain in real time.
-        </div>
-      </div>
-    );
-  }
+  if (!verdicts.length) return <EmptyState />;
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "20px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "14px" }}>
         <div>
-          <div style={{ fontSize: "18px", fontWeight: "800", color: "#e8eaf6", letterSpacing: "-0.01em" }}>
+          <div style={{ fontSize: "18px", fontWeight: "900", letterSpacing: "-0.02em" }}>
             Adjudication Feed
           </div>
-          <div style={{ fontSize: "11px", color: "#5c5f7a", marginTop: "3px" }}>
-            Every verdict is on-chain. Click any transaction to verify.
+          <div style={{ fontSize: "11px", color: "rgba(242,240,255,.35)", marginTop: "3px" }}>
+            Every verdict is on-chain · click any tx to verify
           </div>
         </div>
-        <div style={{ fontSize: "11px", color: "#5c5f7a", fontFamily: "'JetBrains Mono', monospace" }}>
-          {verdicts.length} verdicts
-        </div>
+        <span className="mono" style={{ fontSize: "11px", color: "rgba(242,240,255,.2)" }}>
+          {verdicts.length} total
+        </span>
       </div>
-
-      <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-        {verdicts.map((v, i) => <VerdictCard key={i} v={v} />)}
+      <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+        {verdicts.map((v, i) => <Card key={i} v={v} />)}
       </div>
     </div>
   );
 }
 
-function VerdictCard({ v }) {
+function EmptyState() {
+  return (
+    <div className="g" style={{
+      display: "flex", flexDirection: "column", alignItems: "center",
+      justifyContent: "center", padding: "72px 40px", textAlign: "center",
+      minHeight: "360px",
+    }}>
+      <div style={{
+        width: "64px", height: "64px", borderRadius: "50%",
+        background: "rgba(251,113,3,.1)", border: "1px solid rgba(251,113,3,.25)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        fontSize: "26px", marginBottom: "18px",
+        boxShadow: "0 0 28px rgba(251,113,3,.2)",
+      }}>⚡</div>
+      <div style={{ fontSize: "20px", fontWeight: "900", letterSpacing: "-0.02em", marginBottom: "10px" }}>
+        No adjudications yet
+      </div>
+      <div style={{ fontSize: "13px", color: "rgba(242,240,255,.35)", lineHeight: "1.9", maxWidth: "300px" }}>
+        Pick a fault mode, then hit{" "}
+        <span style={{ color: "#fb7103", fontWeight: "700" }}>Oracle cheated. Slash it.</span>
+        <br />Claude reads the evidence. On-chain in seconds.
+      </div>
+    </div>
+  );
+}
+
+function Card({ v }) {
   const c        = v.checks ?? {};
   const isBreach = v.verdict === "breach";
   const ago      = v.received_at
     ? Math.round((Date.now() - new Date(v.received_at).getTime()) / 1000)
     : null;
 
+  const accent = isBreach ? "#fb7103" : "#22d9e8";
+  const dimBg  = isBreach ? "rgba(251,113,3,.08)"  : "rgba(34,217,232,.06)";
+  const bdr    = isBreach ? "rgba(251,113,3,.25)"  : "rgba(34,217,232,.18)";
+  const txt    = isBreach ? "rgba(255,220,190,.85)" : "rgba(180,250,255,.85)";
+
   return (
-    <div style={{
-      borderRadius: "10px",
-      overflow: "hidden",
-      border: isBreach ? "1px solid rgba(239,68,68,0.2)" : "1px solid rgba(52,211,153,0.15)",
-    }}>
-      {/* Colored header band */}
+    <div className="g slide-in" style={{ overflow: "hidden", borderColor: bdr }}>
+      {/* Accent line */}
+      <div style={{ height: "2px", background: `linear-gradient(90deg, ${accent}, transparent 70%)` }} />
+
+      {/* Header */}
       <div style={{
-        padding: "14px 20px",
-        background: isBreach
-          ? "linear-gradient(90deg, rgba(239,68,68,0.2) 0%, rgba(239,68,68,0.05) 100%)"
-          : "linear-gradient(90deg, rgba(52,211,153,0.12) 0%, rgba(52,211,153,0.03) 100%)",
+        padding: "14px 18px", background: dimBg,
         display: "flex", alignItems: "center", justifyContent: "space-between",
-        borderBottom: isBreach ? "1px solid rgba(239,68,68,0.15)" : "1px solid rgba(52,211,153,0.1)",
+        borderBottom: `1px solid ${bdr}`,
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <span style={{
-            fontSize: "18px", fontWeight: "900", letterSpacing: "-0.01em",
-            color: isBreach ? "#ef4444" : "#34d399",
-          }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <span style={{ fontSize: "17px", fontWeight: "900", color: accent, letterSpacing: "-0.02em" }}>
             {isBreach ? "⚡ BOND SLASHED" : "✓ SLA MET"}
           </span>
           {v.fault_mode && (
-            <span style={{
-              fontSize: "10px", padding: "2px 8px", borderRadius: "99px",
-              background: "rgba(245,158,11,0.15)", color: "#f59e0b",
-              border: "1px solid rgba(245,158,11,0.3)", fontFamily: "'JetBrains Mono', monospace",
+            <span className="mono" style={{
+              fontSize: "9px", padding: "2px 8px", borderRadius: "99px",
+              background: "rgba(251,191,36,.12)", color: "#fbbf24",
+              border: "1px solid rgba(251,191,36,.25)", fontWeight: "600",
             }}>
-              fault:{v.fault_mode}
+              {v.fault_mode}
             </span>
           )}
         </div>
-        <span style={{ fontSize: "11px", color: "#3a3c52", fontFamily: "'JetBrains Mono', monospace" }}>
+        <span className="mono" style={{ fontSize: "10px", color: "rgba(242,240,255,.2)" }}>
           {ago != null ? `${ago}s ago` : ""}
         </span>
       </div>
 
       {/* Body */}
-      <div style={{ padding: "18px 20px", background: "#0d0f1f" }}>
-        {/* Sub-headline */}
-        <div style={{ fontSize: "14px", fontWeight: "700", color: "#e8eaf6", marginBottom: "16px", lineHeight: "1.4" }}>
-          {verdictHeadline(v)}
+      <div style={{ padding: "16px 18px" }}>
+        <div style={{ fontSize: "14px", fontWeight: "700", marginBottom: "12px", color: "#f2f0ff" }}>
+          {headline(v)}
         </div>
 
-        {/* Claude reasoning */}
         {v.reason && (
           <div style={{
-            borderLeft: `2px solid ${isBreach ? "#818cf8" : "#34d399"}`,
-            paddingLeft: "16px",
-            marginBottom: "16px",
+            padding: "12px 14px", borderRadius: "8px",
+            background: "rgba(0,0,0,.25)",
+            borderLeft: `2px solid ${isBreach ? "#c084fc" : "#22d9e8"}`,
+            marginBottom: "14px",
           }}>
             <div style={{
-              fontSize: "10px", fontWeight: "700", letterSpacing: "0.08em",
-              textTransform: "uppercase", color: isBreach ? "#818cf8" : "#34d399",
-              marginBottom: "8px", display: "flex", alignItems: "center", gap: "6px",
+              fontSize: "9px", fontWeight: "700", letterSpacing: ".1em",
+              textTransform: "uppercase", marginBottom: "8px",
+              color: isBreach ? "#c084fc" : "#22d9e8",
             }}>
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none">
-                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.8"/>
-                <path d="M8 12l2.5 2.5L16 9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-              Claude Sonnet 4.6 · Adjudicator Reasoning
+              Claude Sonnet 4.6 · Reasoning
             </div>
-            <div style={{
-              fontSize: "12px", lineHeight: "1.85",
-              color: isBreach ? "#c4b5fd" : "#a7f3d0",
-            }}>
+            <div style={{ fontSize: "12px", lineHeight: "1.85", color: txt }}>
               {v.reason}
             </div>
           </div>
         )}
 
-        {/* Footer */}
-        <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap", paddingTop: "12px", borderTop: "1px solid #1a1b2e" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
           {v.slash_tx && (
-            <a
-              href={`${ARCSCAN}${v.slash_tx}`}
-              target="_blank"
-              rel="noreferrer"
+            <a href={`${ARCSCAN}${v.slash_tx}`} target="_blank" rel="noreferrer"
               style={{
                 display: "inline-flex", alignItems: "center", gap: "6px",
-                padding: "6px 14px", borderRadius: "6px",
-                background: "rgba(239,68,68,0.15)",
-                border: "1px solid rgba(239,68,68,0.3)",
-                color: "#ef4444", fontSize: "11px", fontWeight: "700",
+                padding: "5px 12px", borderRadius: "6px",
+                background: "rgba(251,113,3,.14)", border: "1px solid rgba(251,113,3,.3)",
+                color: "#fb7103", fontSize: "10px", fontWeight: "700",
                 fontFamily: "'JetBrains Mono', monospace", textDecoration: "none",
               }}
             >
-              Bond seized · {v.slash_tx.slice(0, 10)}… ↗
+              Bond seized · {v.slash_tx.slice(0,10)}… ↗
             </a>
           )}
-          <div style={{ display: "flex", gap: "10px" }}>
-            {[["ts", c.timestamp_fresh], ["val", c.value_present], ["sig", c.signature_valid]].map(([label, pass]) => (
-              <span key={label} style={{
-                fontSize: "11px", fontFamily: "'JetBrains Mono', monospace",
-                color: pass ? "#34d399" : "#ef4444",
-              }}>
-                {pass ? "✓" : "✗"} {label}
+          <div style={{ marginLeft: "auto", display: "flex", gap: "10px" }}>
+            {[["ts", c.timestamp_fresh], ["val", c.value_present], ["sig", c.signature_valid]].map(([lbl, pass]) => (
+              <span key={lbl} className="mono" style={{ fontSize: "10px", color: pass ? "#4ade80" : "#fb7103" }}>
+                {pass ? "✓" : "✗"} {lbl}
               </span>
             ))}
           </div>

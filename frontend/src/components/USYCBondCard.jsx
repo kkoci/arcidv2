@@ -1,162 +1,66 @@
-const s = {
-  card: {
-    background: "#111118",
-    border: "1px solid #1e1e2e",
-    borderLeft: "2px solid #8b5cf6",
-    borderRadius: "8px",
-    padding: "20px",
-  },
-  header: {
-    display: "flex", alignItems: "flex-start",
-    justifyContent: "space-between", marginBottom: "14px", gap: "10px",
-  },
-  title: {
-    fontSize: "11px", color: "#6b6b8a",
-    textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: "600",
-  },
-  badgeWrap: { display: "flex", gap: "6px", flexShrink: 0 },
-  badge: (c) => ({
-    padding: "3px 10px", borderRadius: "99px", fontSize: "11px", fontWeight: "700",
-    background: c + "18", color: c, border: `1px solid ${c}40`,
-  }),
-
-  lede: {
-    fontSize: "13px", fontWeight: "700", color: "#e2e8f0",
-    marginBottom: "6px", lineHeight: "1.4",
-  },
-  ledeSub: {
-    fontSize: "11px", color: "#6b6b8a", marginBottom: "14px", lineHeight: "1.6",
-  },
-
-  narrative: {
-    background: "rgba(139, 92, 246, 0.06)",
-    border: "1px solid rgba(139, 92, 246, 0.18)",
-    borderRadius: "6px",
-    padding: "14px 16px",
-    marginBottom: "14px",
-  },
-  narrativeTitle: {
-    fontWeight: "700", color: "#8b5cf6",
-    marginBottom: "8px", fontSize: "11px",
-    textTransform: "uppercase", letterSpacing: "0.06em",
-  },
-  narrativeBody: {
-    fontSize: "11px", color: "#c4b5fd", lineHeight: "1.75",
-  },
-  pill: {
-    display: "inline-block", fontSize: "10px", padding: "2px 8px",
-    borderRadius: "99px", background: "#8b5cf618",
-    color: "#8b5cf6", border: "1px solid #8b5cf640",
-    marginRight: "4px", marginBottom: "8px",
-  },
-
-  grid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "14px" },
-  cell: { background: "#0d1117", borderRadius: "6px", padding: "10px 12px" },
-  cellLabel: {
-    fontSize: "10px", color: "#6b6b8a",
-    textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: "600",
-  },
-  cellVal: { fontSize: "13px", marginTop: "3px", fontFamily: "'JetBrains Mono', monospace" },
-  cellSub: { fontSize: "9px", color: "#6b6b8a", marginTop: "2px", fontFamily: "'JetBrains Mono', monospace" },
-
-  addr: {
-    fontSize: "10px", color: "#8b5cf6", wordBreak: "break-all",
-    marginTop: "4px", fontFamily: "'JetBrains Mono', monospace",
-  },
-  cmdRow: {
-    display: "flex", alignItems: "center", gap: "8px",
-    padding: "8px 12px", background: "#0d1117",
-    borderRadius: "6px", border: "1px solid #1e1e2e",
-  },
-  cmdLabel: {
-    fontSize: "10px", color: "#6b6b8a", fontWeight: "600",
-    textTransform: "uppercase", letterSpacing: "0.08em",
-  },
-  cmdCode: {
-    fontSize: "11px", color: "#8b5cf6",
-    fontFamily: "'JetBrains Mono', monospace",
-  },
-};
-
-function shorten(addr) {
-  if (!addr) return "—";
-  return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
-}
+const ARCSCAN   = "https://testnet.arcscan.app/address/";
+const USYC_ADDR = "0xe9185F0c5F296Ed1797AaE4238D26CCaBEadb86C";
 
 export default function USYCBondCard({ usyc }) {
-  const bondAddr  = usyc?.bond   ?? null;
-  const tokenAddr = usyc?.token  ?? "0xe9185F0c5F296Ed1797AaE4238D26CCaBEadb86C";
-  const teller    = usyc?.teller ?? "0x9fdF14c5B14173D74C08Af27AebFf39240dC105A";
-  const deployed  = !!bondAddr;
+  const addr     = usyc?.address;
+  const deployed = !!addr;
+  const apy      = usyc?.apy != null ? `${(Number(usyc.apy)/100).toFixed(2)}%` : "~4.9%";
 
   return (
-    <div style={s.card}>
-      <div style={s.header}>
-        <div style={s.title}>Yield-bearing collateral · Circle USDC → USYC</div>
-        <div style={s.badgeWrap}>
-          <span style={s.badge(deployed ? "#34d399" : "#f59e0b")}>
-            {deployed ? "● deployed" : "⏳ allowlist pending"}
+    <div className="g" style={{ overflow: "hidden" }}>
+      <div style={{ height: "2px", background: "linear-gradient(90deg, #7c3aed, #c084fc, transparent)" }} />
+      <div style={{ padding: "14px 16px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "10px" }}>
+          <div>
+            <div style={{ fontSize: "12px", fontWeight: "800", letterSpacing: "-.01em" }}>USYC Yield Bonds</div>
+            <div style={{ fontSize: "10px", color: "rgba(242,240,255,.35)", marginTop: "2px" }}>
+              USDC → USYC via Hashnote · earns while bonded
+            </div>
+          </div>
+          <span style={{
+            fontSize: "9px", padding: "3px 10px", borderRadius: "99px",
+            background: deployed ? "rgba(74,222,128,.12)"  : "rgba(255,255,255,.05)",
+            color:      deployed ? "#4ade80"               : "rgba(242,240,255,.2)",
+            border:     `1px solid ${deployed ? "rgba(74,222,128,.3)" : "rgba(255,255,255,.08)"}`,
+            fontWeight: "700", letterSpacing: ".08em", whiteSpace: "nowrap",
+          }}>
+            {deployed ? "DEPLOYED" : "PENDING"}
           </span>
         </div>
-      </div>
 
-      {/* Lead with the concept, not the number */}
-      <div style={s.lede}>Collateral that earns T-bill returns while locked at stake.</div>
-      <div style={s.ledeSub}>
-        Circle USDC → Hashnote Teller → USYC → posted as bond. On breach, consumer
-        receives USYC worth more than the original deposit.
-      </div>
-
-      <div style={s.narrative}>
-        <div style={s.narrativeTitle}>The Circle Differentiator</div>
-        <div style={{ marginBottom: "8px" }}>
-          <span style={s.pill}>USYC</span>
-          <span style={s.pill}>x402</span>
-          <span style={s.pill}>TEE-gated</span>
-          <span style={s.pill}>Circle USDC</span>
+        <div style={{ display: "flex", gap: "10px", marginBottom: "12px" }}>
+          <div style={{ flex: 1, padding: "9px 12px", borderRadius: "8px", background: "rgba(0,0,0,.2)" }}>
+            <div style={{ fontSize: "9px", color: "rgba(242,240,255,.25)", textTransform: "uppercase", letterSpacing: ".08em", fontWeight: "600" }}>APY</div>
+            <div className="mono" style={{ fontSize: "18px", fontWeight: "800", color: "#c084fc", marginTop: "2px" }}>{apy}</div>
+          </div>
+          <div style={{ flex: 1, padding: "9px 12px", borderRadius: "8px", background: "rgba(0,0,0,.2)" }}>
+            <div style={{ fontSize: "9px", color: "rgba(242,240,255,.25)", textTransform: "uppercase", letterSpacing: ".08em", fontWeight: "600" }}>Backed by</div>
+            <div style={{ fontSize: "12px", fontWeight: "700", color: "#f2f0ff", marginTop: "3px" }}>T-bills</div>
+          </div>
         </div>
-        <div style={s.narrativeBody}>
-          Agents post <strong style={{ color: "#e2e8f0" }}>yield-bearing USYC</strong> as bond
-          collateral instead of idle USDC. The bond earns T-bill returns (~4.9% APY) while it
-          sits at stake. On a confirmed SLA breach, the consumer receives USYC —{" "}
-          <em style={{ color: "#e2e8f0" }}>worth more than face value</em> at slash time.{" "}
-          <strong style={{ color: "#e2e8f0" }}>Capital at risk that isn't idle capital.</strong>
+
+        <div style={{ fontSize: "11px", color: "rgba(242,240,255,.4)", lineHeight: "1.7", marginBottom: deployed ? "12px" : "0" }}>
+          Agents post yield-bearing USYC as collateral.
+          On breach, consumer receives USYC{" "}
+          <span style={{ color: "#c084fc", fontWeight: "700" }}>worth more than original deposit.</span>
         </div>
+
+        {deployed && (
+          <a href={`${ARCSCAN}${addr}`} target="_blank" rel="noreferrer"
+            style={{
+              display: "flex", justifyContent: "space-between", alignItems: "center",
+              padding: "7px 10px", borderRadius: "7px",
+              background: "rgba(124,58,237,.1)", border: "1px solid rgba(192,132,252,.2)",
+              textDecoration: "none",
+            }}
+          >
+            <span className="mono" style={{ fontSize: "9px", color: "#c084fc" }}>
+              {addr.slice(0,14)}…{addr.slice(-6)}
+            </span>
+            <span style={{ color: "#c084fc", fontSize: "11px" }}>↗</span>
+          </a>
+        )}
       </div>
-
-      <div style={s.grid}>
-        <Cell label="Collateral" val="USYC"    sub={shorten(tokenAddr)} color="#8b5cf6" />
-        <Cell label="Teller"     val="Hashnote" sub={shorten(teller)} />
-        <Cell label="Yield"      val="~4.9%"   sub="T-bill backed"    color="#34d399" />
-        <Cell
-          label="Bond contract"
-          val={deployed ? "deployed" : "pending"}
-          sub={deployed ? shorten(bondAddr) : "deploy:usyc:arc"}
-          color={deployed ? "#34d399" : "#f59e0b"}
-        />
-      </div>
-
-      {deployed && (
-        <div style={{ marginBottom: "12px" }}>
-          <div style={s.cellLabel}>Contract address</div>
-          <div style={s.addr}>{bondAddr}</div>
-        </div>
-      )}
-
-      <div style={s.cmdRow}>
-        <span style={s.cmdLabel}>mint</span>
-        <code style={s.cmdCode}>npm run mint:usyc:arc</code>
-      </div>
-    </div>
-  );
-}
-
-function Cell({ label, val, sub, color }) {
-  return (
-    <div style={s.cell}>
-      <div style={s.cellLabel}>{label}</div>
-      <div style={{ ...s.cellVal, color: color || "#e2e8f0" }}>{val}</div>
-      {sub && <div style={s.cellSub}>{sub}</div>}
     </div>
   );
 }
