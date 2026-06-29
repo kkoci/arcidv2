@@ -34,11 +34,12 @@ const s = {
   }),
   liveTag: { fontSize: "11px", color: "#6b6b8a", display: "flex", alignItems: "center" },
   main:    {
-    flex: 1, display: "grid", gridTemplateColumns: "360px 1fr",
+    flex: 1, display: "grid",
+    gridTemplateColumns: "1fr 380px",
     gap: "16px", padding: "16px 24px",
     maxWidth: "1400px", width: "100%", margin: "0 auto",
   },
-  left:    { display: "flex", flexDirection: "column", gap: "16px" },
+  right:   { display: "flex", flexDirection: "column", gap: "16px" },
   section: {
     fontSize: "10px", color: "#6b6b8a", textTransform: "uppercase",
     letterSpacing: "0.1em", marginBottom: "8px", fontWeight: "600",
@@ -50,6 +51,12 @@ const s = {
   },
   infoKey: { color: "#6b6b8a" },
   infoVal: { color: "#e2e8f0", fontFamily: "'JetBrains Mono', monospace", fontSize: "10px" },
+  collapseBtn: {
+    background: "none", border: "none", padding: 0,
+    fontSize: "10px", color: "#6b6b8a", cursor: "pointer",
+    textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: "600",
+    display: "flex", alignItems: "center", gap: "4px",
+  },
 };
 
 export default function App() {
@@ -59,6 +66,7 @@ export default function App() {
   const [loading,    setLoading]    = useState(true);
   const [live,       setLive]       = useState(false);
   const [lastPoll,   setLastPoll]   = useState(null);
+  const [showSystem, setShowSystem] = useState(false);
   const timerRef = useRef(null);
 
   async function poll() {
@@ -108,7 +116,7 @@ export default function App() {
           </div>
           <span style={s.logo}>ArcID</span>
           <span style={s.logoSep}>·</span>
-          <span style={s.logoSub}>reputation you post as collateral, not a score you ask to be trusted</span>
+          <span style={s.logoSub}>if an AI agent cheats, it loses its deposit. automatically.</span>
         </div>
         <div style={s.liveTag}>
           <span style={s.pulse(live)} />
@@ -121,49 +129,48 @@ export default function App() {
       {/* Traction strip */}
       <TractionStrip stats={stats ?? {}} chainStats={chainStats} loading={loading} />
 
-      {/* Body */}
+      {/* Body — verdict feed left (dominant), controls right */}
       <div style={s.main}>
-        {/* Left column */}
-        <div style={s.left}>
+        {/* Left column — verdict feed dominates */}
+        <div>
+          <div style={s.section}>Adjudication feed</div>
+          <VerdictHistory verdicts={sorted} />
+        </div>
+
+        {/* Right column — controls */}
+        <div style={s.right}>
           <div>
-            <div style={s.section}>Registered Agents (on-chain)</div>
+            <div style={s.section}>Live agents</div>
             <AgentCard stats={stats} chainStats={chainStats} onCycleComplete={poll} />
           </div>
-
-          <div>
-            <div style={s.section}>System</div>
-            <div style={s.infoBox}>
-              <InfoRow k="Chain"       v="Arc testnet (5042002)" />
-              <InfoRow k="Protocol"    v="x402 nanopayments" />
-              <InfoRow k="Collateral"  v="USDC / USYC" />
-              <InfoRow k="Registry"    v="ArcIDRegistryV2 + DCAP" />
-              <InfoRow k="Adjudicator" v="Claude Sonnet 4.6" highlight />
-              <InfoRow k="Slash type"  v="On-chain (real USDC)" />
-              <InfoRow k="Consumer"    v={stats?.consumer ?? "0x8F43C6a0..."} />
-            </div>
-          </div>
-
-          {chainStats?.summary?.totalSlashes > 0 && (
-            <div>
-              <div style={s.section}>Chain summary</div>
-              <div style={s.infoBox}>
-                <InfoRow k="Total agents"  v={chainStats.summary.totalAgents} />
-                <InfoRow k="Active bonds"  v={chainStats.summary.activeAgents} />
-                <InfoRow k="Total slashes" v={chainStats.summary.totalSlashes} red />
-              </div>
-            </div>
-          )}
 
           <div>
             <div style={s.section}>Phase 5 — Yield-Bearing Bond</div>
             <USYCBondCard usyc={stats?.usyc} />
           </div>
-        </div>
 
-        {/* Right column */}
-        <div>
-          <div style={s.section}>Adjudication feed</div>
-          <VerdictHistory verdicts={sorted} />
+          {/* Collapsible system info */}
+          <div>
+            <button style={s.collapseBtn} onClick={() => setShowSystem(v => !v)}>
+              {showSystem ? "▾" : "▸"} Technical details
+            </button>
+            {showSystem && (
+              <div style={{ ...s.infoBox, marginTop: "8px" }}>
+                <InfoRow k="Chain"       v="Arc testnet (5042002)" />
+                <InfoRow k="Protocol"    v="x402 nanopayments" />
+                <InfoRow k="Collateral"  v="USDC / USYC" />
+                <InfoRow k="Registry"    v="ArcIDRegistryV2 + DCAP" />
+                <InfoRow k="Adjudicator" v="Claude Sonnet 4.6" highlight />
+                <InfoRow k="Slash type"  v="On-chain (real USDC)" />
+                <InfoRow k="Consumer"    v={stats?.consumer ?? "0x8F43C6a0..."} />
+                {chainStats?.summary && <>
+                  <InfoRow k="Total agents"  v={chainStats.summary.totalAgents} />
+                  <InfoRow k="Active bonds"  v={chainStats.summary.activeAgents} />
+                  <InfoRow k="Total slashes" v={chainStats.summary.totalSlashes} red />
+                </>}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

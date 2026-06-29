@@ -7,18 +7,26 @@ const s = {
     padding: "20px",
   },
   header: {
-    display: "flex", alignItems: "center",
-    justifyContent: "space-between", marginBottom: "14px",
+    display: "flex", alignItems: "flex-start",
+    justifyContent: "space-between", marginBottom: "14px", gap: "10px",
   },
   title: {
     fontSize: "11px", color: "#6b6b8a",
     textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: "600",
   },
-  badgeWrap: { display: "flex", gap: "6px" },
+  badgeWrap: { display: "flex", gap: "6px", flexShrink: 0 },
   badge: (c) => ({
     padding: "3px 10px", borderRadius: "99px", fontSize: "11px", fontWeight: "700",
     background: c + "18", color: c, border: `1px solid ${c}40`,
   }),
+
+  lede: {
+    fontSize: "13px", fontWeight: "700", color: "#e2e8f0",
+    marginBottom: "6px", lineHeight: "1.4",
+  },
+  ledeSub: {
+    fontSize: "11px", color: "#6b6b8a", marginBottom: "14px", lineHeight: "1.6",
+  },
 
   narrative: {
     background: "rgba(139, 92, 246, 0.06)",
@@ -84,13 +92,19 @@ export default function USYCBondCard({ usyc }) {
   return (
     <div style={s.card}>
       <div style={s.header}>
-        <div style={s.title}>Phase 5 — Yield-Bearing Bond (Circle USDC + USYC)</div>
+        <div style={s.title}>Yield-bearing collateral · Circle USDC → USYC</div>
         <div style={s.badgeWrap}>
-          <span style={s.badge("#8b5cf6")}>yield-bearing</span>
           <span style={s.badge(deployed ? "#34d399" : "#f59e0b")}>
             {deployed ? "● deployed" : "⏳ allowlist pending"}
           </span>
         </div>
+      </div>
+
+      {/* Lead with the concept, not the number */}
+      <div style={s.lede}>Collateral that earns T-bill returns while locked at stake.</div>
+      <div style={s.ledeSub}>
+        Circle USDC → Hashnote Teller → USYC → posted as bond. On breach, consumer
+        receives USYC worth more than the original deposit.
       </div>
 
       <div style={s.narrative}>
@@ -104,19 +118,19 @@ export default function USYCBondCard({ usyc }) {
         <div style={s.narrativeBody}>
           Agents post <strong style={{ color: "#e2e8f0" }}>yield-bearing USYC</strong> as bond
           collateral instead of idle USDC. The bond earns T-bill returns (~4.9% APY) while it
-          sits at stake. On a confirmed SLA breach, the consumer receives USYC — worth{" "}
-          <em style={{ color: "#e2e8f0" }}>more</em> than face value at slash time.{" "}
+          sits at stake. On a confirmed SLA breach, the consumer receives USYC —{" "}
+          <em style={{ color: "#e2e8f0" }}>worth more than face value</em> at slash time.{" "}
           <strong style={{ color: "#e2e8f0" }}>Capital at risk that isn't idle capital.</strong>
         </div>
       </div>
 
       <div style={s.grid}>
-        <Cell label="Collateral token" val="USYC"     sub={shorten(tokenAddr)} color="#8b5cf6" />
-        <Cell label="Teller"           val="Hashnote"  sub={shorten(teller)} />
-        <Cell label="APY (est.)"       val="~4.9%"    sub="T-bill backed"    color="#34d399" />
+        <Cell label="Collateral" val="USYC"    sub={shorten(tokenAddr)} color="#8b5cf6" />
+        <Cell label="Teller"     val="Hashnote" sub={shorten(teller)} />
+        <Cell label="Yield"      val="~4.9%"   sub="T-bill backed"    color="#34d399" />
         <Cell
           label="Bond contract"
-          val={deployed ? "deployed" : "pending allowlist"}
+          val={deployed ? "deployed" : "pending"}
           sub={deployed ? shorten(bondAddr) : "deploy:usyc:arc"}
           color={deployed ? "#34d399" : "#f59e0b"}
         />

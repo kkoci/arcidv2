@@ -1,17 +1,18 @@
 import { useState } from "react";
 
-const ARCSCAN    = "https://testnet.arcscan.app/tx/";
+const ARCSCAN     = "https://testnet.arcscan.app/tx/";
 const ORACLE_ADDR = "0xe2f7a0e6d9865c7dc9b5d19dcc11cbcb4655c661";
 const FAULT_MODES = ["stale", "null", "bad-sig"];
 
 const s = {
-  card: {
-    background: "#111118",
-    border: "1px solid #1e1e2e",
+  card: (slashed) => ({
+    background: slashed ? "rgba(239,68,68,0.05)" : "#111118",
+    border: slashed ? "1px solid rgba(239,68,68,0.3)" : "1px solid #1e1e2e",
     borderRadius: "8px",
     padding: "20px",
     marginBottom: "12px",
-  },
+    transition: "background 0.5s, border-color 0.5s",
+  }),
   header: {
     display: "flex", alignItems: "flex-start",
     justifyContent: "space-between", marginBottom: "14px",
@@ -26,14 +27,14 @@ const s = {
     padding: "3px 10px", borderRadius: "99px", fontSize: "11px",
     fontWeight: "700", letterSpacing: "0.06em", flexShrink: 0,
     background: status === "active"  ? "#34d39918"
-               : status === "slashed" ? "#ef444418"
+               : status === "slashed" ? "#ef444430"
                :                        "#6b6b8a18",
     color:      status === "active"  ? "#34d399"
                : status === "slashed" ? "#ef4444"
                :                        "#6b6b8a",
     border: `1px solid ${
                status === "active"  ? "#34d39940"
-               : status === "slashed" ? "#ef444440"
+               : status === "slashed" ? "#ef444460"
                :                        "#6b6b8a40"}`,
     transition: "all 0.4s ease",
   }),
@@ -43,10 +44,12 @@ const s = {
   metaLabel: { fontSize: "10px", color: "#6b6b8a", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: "600" },
   metaValue: { fontSize: "13px", marginTop: "3px", fontFamily: "'JetBrains Mono', monospace" },
 
+  faultSection: { marginBottom: "12px" },
   faultLabel: {
-    fontSize: "10px", color: "#6b6b8a", marginBottom: "8px",
+    fontSize: "10px", color: "#6b6b8a", marginBottom: "4px",
     textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: "600",
   },
+  faultSub: { fontSize: "10px", color: "#454b63", marginBottom: "8px", lineHeight: "1.5" },
   controls: { display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" },
   faultBtn: (active) => ({
     background: active ? "#ef444425" : "#1e1e2e",
@@ -64,16 +67,19 @@ const s = {
   },
 
   triggerBtn: (busy) => ({
-    width: "100%", padding: "11px", borderRadius: "6px",
-    fontSize: "12px", fontWeight: "700", letterSpacing: "0.04em",
+    width: "100%", padding: "12px", borderRadius: "6px",
+    fontSize: "13px", fontWeight: "700", letterSpacing: "0.02em",
     cursor: busy ? "not-allowed" : "pointer",
     background: busy ? "#1e1e2e" : "#ef4444",
     color:      busy ? "#6b6b8a" : "#ffffff",
     border:     `1px solid ${busy ? "#2e2e4e" : "#ef4444"}`,
-    marginTop: "12px", transition: "all 0.2s",
-    fontFamily: "'JetBrains Mono', monospace",
-    boxShadow: busy ? "none" : "0 0 20px rgba(239,68,68,0.25)",
+    marginTop: "4px", transition: "all 0.2s",
+    boxShadow: busy ? "none" : "0 0 24px rgba(239,68,68,0.3)",
   }),
+  triggerSub: {
+    fontSize: "10px", color: "#6b6b8a", textAlign: "center",
+    marginTop: "6px", lineHeight: "1.5",
+  },
 
   resultBox: {
     background: "#0d1117", borderRadius: "6px",
@@ -85,7 +91,7 @@ const s = {
   txLink: {
     fontSize: "10px", color: "#22d3ee", wordBreak: "break-all",
     marginTop: "4px", fontFamily: "'JetBrains Mono', monospace",
-    textDecoration: "none",
+    textDecoration: "none", fontWeight: "600",
   },
 
   agentList: { display: "flex", flexDirection: "column", gap: "6px" },
@@ -117,6 +123,7 @@ export default function AgentCard({ stats, chainStats, onCycleComplete }) {
 
   const agents      = chainStats?.agents ?? [];
   const oracleAgent = agents.find(a => a.address.toLowerCase() === ORACLE_ADDR);
+  const isSlashed   = oracleAgent?.slashed === true;
 
   async function triggerFault(mode) {
     setBusy(true); setMsg("");
@@ -125,7 +132,7 @@ export default function AgentCard({ stats, chainStats, onCycleComplete }) {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mode }),
       });
-      if (r.ok) { setActiveFault(mode); setMsg(`Fault "${mode}" active — breach within ~12s`); }
+      if (r.ok) { setActiveFault(mode); setMsg(`"${mode}" fault active — breach within ~12s`); }
       else setMsg("Failed to set fault mode");
     } catch (e) { setMsg(`Error: ${e.message}`); }
     finally { setBusy(false); }
@@ -157,10 +164,10 @@ export default function AgentCard({ stats, chainStats, onCycleComplete }) {
   return (
     <div>
       {/* Oracle agent card */}
-      <div style={s.card}>
+      <div style={s.card(isSlashed)}>
         <div style={s.header}>
           <div>
-            <div style={s.title}>Oracle Agent</div>
+            <div style={s.title}>Price Oracle</div>
             <div style={s.address}>{stats?.oracle ?? ORACLE_ADDR}</div>
           </div>
           <div style={s.badge(oracleAgent ? agentStatus(oracleAgent) : "no bond")}>
@@ -174,7 +181,7 @@ export default function AgentCard({ stats, chainStats, onCycleComplete }) {
           <MetaItem
             label="Bond"
             value={oracleAgent ? fmtUsdc(oracleAgent.amount) : "—"}
-            color={oracleAgent?.slashed ? "#ef4444" : "#22d3ee"}
+            color={isSlashed ? "#ef4444" : "#22d3ee"}
           />
           <MetaItem label="SLA"         value="30s max age" />
           <MetaItem label="Total calls" value={stats?.totalCalls ?? 0} />
@@ -185,19 +192,29 @@ export default function AgentCard({ stats, chainStats, onCycleComplete }) {
           />
         </div>
 
-        <div style={s.faultLabel}>Trigger Fault (oracle responds badly)</div>
-        <div style={s.controls}>
-          {FAULT_MODES.map(m => (
-            <button key={m} style={s.faultBtn(activeFault === m)}
-                    onClick={() => triggerFault(m)} disabled={busy}>{m}</button>
-          ))}
-          <button style={s.resetBtn} onClick={resetFault} disabled={busy || !activeFault}>reset</button>
-          {msg && <span style={{ fontSize: "10px", color: "#6b6b8a", marginLeft: "4px" }}>{msg}</span>}
+        {/* Fault injection */}
+        <div style={s.faultSection}>
+          <div style={s.faultLabel}>Force a fault to trigger adjudication</div>
+          <div style={s.faultSub}>The consumer agent detects the fault and calls Claude within seconds.</div>
+          <div style={s.controls}>
+            {FAULT_MODES.map(m => (
+              <button key={m} style={s.faultBtn(activeFault === m)}
+                      onClick={() => triggerFault(m)} disabled={busy}>{m}</button>
+            ))}
+            <button style={s.resetBtn} onClick={resetFault} disabled={busy || !activeFault}>reset</button>
+          </div>
+          {msg && <div style={{ fontSize: "10px", color: "#6b6b8a", marginTop: "6px" }}>{msg}</div>}
         </div>
 
+        {/* Trigger button */}
         <button style={s.triggerBtn(triggering)} onClick={handleTriggerCycle} disabled={triggering}>
-          {triggering ? "⏳  Running slash loop…" : "⚡  Trigger Demo Slash (full loop)"}
+          {triggering ? "Claude is reading the evidence…" : "Oracle cheated. Slash it. →"}
         </button>
+        {!triggering && (
+          <div style={s.triggerSub}>
+            Claude will adjudicate. Bond transfers on-chain. Watch it happen.
+          </div>
+        )}
 
         {cycleResult && (
           <div style={s.resultBox}>
@@ -212,7 +229,7 @@ export default function AgentCard({ stats, chainStats, onCycleComplete }) {
             </div>
             {cycleResult.slashTx && (
               <div style={{ marginTop: "6px" }}>
-                <span style={s.resultLabel}>Slash tx:</span>
+                <span style={s.resultLabel}>Seized →</span>
                 <a href={`${ARCSCAN}${cycleResult.slashTx}`} target="_blank"
                    rel="noreferrer" style={s.txLink}>
                   {cycleResult.slashTx.slice(0, 20)}… ↗
@@ -245,6 +262,7 @@ export default function AgentCard({ stats, chainStats, onCycleComplete }) {
                 <div key={agent.address} style={{
                   ...s.agentRow,
                   borderColor: isOracle ? "#22d3ee30" : "#1e1e2e",
+                  background: agent.slashed ? "rgba(239,68,68,0.04)" : "#111118",
                 }}>
                   <div>
                     <div style={s.agentAddr}>{fmt(agent.address)}</div>

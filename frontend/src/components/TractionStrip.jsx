@@ -28,7 +28,6 @@ const s = {
   },
   sub: {
     fontSize: "10px",
-    color: "#6b6b8a",
     marginTop: "4px",
   },
 };
@@ -49,44 +48,27 @@ export default function TractionStrip({ stats, chainStats, loading }) {
 
   return (
     <div style={s.strip}>
+      <Stat label="Skin in the game"  value={activeAgents} sub="bonded agents on Arc" />
+      <Stat label="USDC at stake"     value={tvlDisplay}   sub="collateral locked"       color="#22d3ee" />
+      <Stat label="Paid queries"      value={stats.totalCalls ?? 0} sub="x402 nanopayments" />
+      <Stat label="SLAs upheld"       value={stats.okCount ?? 0}    sub="clean adjudications" color="#34d399" />
       <Stat
-        label="Bonded Agents"
-        value={activeAgents}
-        sub="skin in the game"
-      />
-      <Stat
-        label="Bond TVL"
-        value={tvlDisplay}
-        sub="USDC collateral at risk"
-        color="#22d3ee"
-      />
-      <Stat
-        label="Total Calls"
-        value={stats.totalCalls ?? 0}
-        sub="x402 nanopayments"
-      />
-      <Stat
-        label="OK Verdicts"
-        value={stats.okCount ?? 0}
-        sub="SLAs upheld on-chain"
-        color="#34d399"
-      />
-      <Stat
-        label="Slash Events"
+        label="Cheaters caught"
         value={slashCount}
         sub="bonds seized on-chain"
-        color={slashCount > 0 ? "#ef4444" : undefined}
+        color={slashCount > 0 ? "#ef4444" : "#6b6b8a"}
         borderLeft={slashCount > 0 ? "2px solid #ef4444" : "2px solid transparent"}
+        highlight={slashCount > 0}
       />
     </div>
   );
 }
 
-function Stat({ label, value, sub, color, borderLeft }) {
+function Stat({ label, value, sub, color, borderLeft, highlight }) {
   return (
     <div style={{ ...s.cell, borderLeft: borderLeft || "2px solid transparent" }}>
-      <div style={s.label}>{label}</div>
-      <div style={{ ...s.value, color: color || "#e2e8f0" }}>{value}</div>
+      <div style={{ ...s.label, color: highlight ? "#ef4444" : "#6b6b8a" }}>{label}</div>
+      <div style={{ ...s.value, color: color || "#e2e8f0", fontSize: highlight ? "26px" : "22px" }}>{value}</div>
       <div style={{ ...s.sub, color: color ? `${color}99` : "#6b6b8a" }}>{sub}</div>
     </div>
   );
