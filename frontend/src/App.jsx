@@ -1,63 +1,9 @@
 import { useEffect, useState, useRef } from "react";
-import TractionStrip  from "./components/TractionStrip.jsx";
-import AgentCard      from "./components/AgentCard.jsx";
-import VerdictHistory  from "./components/VerdictHistory.jsx";
-import USYCBondCard   from "./components/USYCBondCard.jsx";
+import AgentCard     from "./components/AgentCard.jsx";
+import VerdictHistory from "./components/VerdictHistory.jsx";
+import USYCBondCard  from "./components/USYCBondCard.jsx";
 
 const POLL_MS = 5000;
-
-const s = {
-  app:     { minHeight: "100vh", display: "flex", flexDirection: "column" },
-  topbar:  {
-    display: "flex", alignItems: "center", justifyContent: "space-between",
-    padding: "12px 24px", borderBottom: "1px solid #1e1e2e",
-    background: "rgba(13, 17, 23, 0.9)",
-    backdropFilter: "blur(12px)",
-    position: "sticky", top: 0, zIndex: 100,
-  },
-  logoWrap: { display: "flex", alignItems: "center", gap: "10px" },
-  logoMark: {
-    width: "26px", height: "26px", borderRadius: "5px",
-    background: "linear-gradient(135deg, #4f46e5, #6366f1)",
-    display: "flex", alignItems: "center", justifyContent: "center",
-    flexShrink: 0,
-  },
-  logo:    { fontSize: "13px", fontWeight: "700", letterSpacing: "-0.01em", color: "#e2e8f0" },
-  logoSep: { color: "#2d2d4e", fontSize: "16px", fontWeight: "300" },
-  logoSub: { fontSize: "11px", color: "#6b6b8a" },
-  pulse:   (live) => ({
-    width: "7px", height: "7px", borderRadius: "50%",
-    background: live ? "#34d399" : "#ef4444",
-    boxShadow: live ? "0 0 0 3px rgba(52,211,153,0.25)" : "none",
-    display: "inline-block", marginRight: "6px",
-    animation: live ? "pulse 2s ease-in-out infinite" : "none",
-  }),
-  liveTag: { fontSize: "11px", color: "#6b6b8a", display: "flex", alignItems: "center" },
-  main:    {
-    flex: 1, display: "grid",
-    gridTemplateColumns: "1fr 380px",
-    gap: "16px", padding: "16px 24px",
-    maxWidth: "1400px", width: "100%", margin: "0 auto",
-  },
-  right:   { display: "flex", flexDirection: "column", gap: "16px" },
-  section: {
-    fontSize: "10px", color: "#6b6b8a", textTransform: "uppercase",
-    letterSpacing: "0.1em", marginBottom: "8px", fontWeight: "600",
-  },
-  infoBox: { background: "#111118", border: "1px solid #1e1e2e", borderRadius: "8px", padding: "16px" },
-  infoRow: {
-    display: "flex", justifyContent: "space-between", padding: "6px 0",
-    borderBottom: "1px solid #0d1117", fontSize: "11px",
-  },
-  infoKey: { color: "#6b6b8a" },
-  infoVal: { color: "#e2e8f0", fontFamily: "'JetBrains Mono', monospace", fontSize: "10px" },
-  collapseBtn: {
-    background: "none", border: "none", padding: 0,
-    fontSize: "10px", color: "#6b6b8a", cursor: "pointer",
-    textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: "600",
-    display: "flex", alignItems: "center", gap: "4px",
-  },
-};
 
 export default function App() {
   const [stats,      setStats]      = useState(null);
@@ -95,97 +41,167 @@ export default function App() {
   }, []);
 
   const sorted = [...verdicts].reverse();
+  const slashCount = chainStats?.summary?.totalSlashes ?? 0;
+  const tvlRaw     = chainStats?.summary?.tvlUsdc;
+  const tvlDisplay = tvlRaw != null ? `$${(Number(tvlRaw) / 1e6).toFixed(2)}` : null;
+  const agents     = chainStats?.summary?.activeAgents ?? 0;
 
   return (
-    <div style={s.app}>
-      <style>{`
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.4; }
-        }
-      `}</style>
+    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+      <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}} @keyframes glow{0%,100%{box-shadow:0 0 20px rgba(239,68,68,.3)}50%{box-shadow:0 0 40px rgba(239,68,68,.6)}}`}</style>
 
-      {/* Top bar */}
-      <div style={s.topbar}>
-        <div style={s.logoWrap}>
-          <div style={s.logoMark}>
+      {/* Topbar */}
+      <nav style={{
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "12px 32px", borderBottom: "1px solid #1a1b2e",
+        background: "rgba(8,9,26,0.9)", backdropFilter: "blur(20px)",
+        position: "sticky", top: 0, zIndex: 100,
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <div style={{
+            width: "28px", height: "28px", borderRadius: "6px",
+            background: "linear-gradient(135deg, #4f46e5, #818cf8)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            boxShadow: "0 0 16px rgba(99,102,241,0.4)",
+          }}>
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
               <path d="M3 11L7 3L11 11" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
               <path d="M4.5 8.5H9.5" stroke="white" strokeWidth="1.2" strokeLinecap="round"/>
             </svg>
           </div>
-          <span style={s.logo}>ArcID</span>
-          <span style={s.logoSep}>·</span>
-          <span style={s.logoSub}>if an AI agent cheats, it loses its deposit. automatically.</span>
+          <span style={{ fontSize: "15px", fontWeight: "800", color: "#e8eaf6", letterSpacing: "-0.02em" }}>ArcID</span>
+          <span style={{
+            fontSize: "10px", padding: "2px 8px", borderRadius: "99px",
+            background: "rgba(99,102,241,0.15)", color: "#818cf8",
+            border: "1px solid rgba(99,102,241,0.3)", fontWeight: "600", letterSpacing: "0.06em",
+          }}>TESTNET</span>
         </div>
-        <div style={s.liveTag}>
-          <span style={s.pulse(live)} />
-          {live
-            ? `live · refreshes ${POLL_MS / 1000}s${lastPoll ? ` · ${lastPoll.toLocaleTimeString()}` : ""}`
-            : "disconnected"}
+        <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "11px", color: "#5c5f7a" }}>
+          <div style={{
+            width: "7px", height: "7px", borderRadius: "50%",
+            background: live ? "#34d399" : "#ef4444",
+            boxShadow: live ? "0 0 0 3px rgba(52,211,153,0.2)" : "none",
+            animation: live ? "pulse 2s ease-in-out infinite" : "none",
+          }} />
+          {live ? `live · ${lastPoll?.toLocaleTimeString() ?? ""}` : "disconnected"}
+        </div>
+      </nav>
+
+      {/* Hero */}
+      <div style={{
+        padding: "64px 32px 56px",
+        borderBottom: "1px solid #1a1b2e",
+        background: "linear-gradient(180deg, rgba(99,102,241,0.07) 0%, transparent 100%)",
+        textAlign: "center",
+      }}>
+        <div style={{
+          display: "inline-flex", alignItems: "center", gap: "8px",
+          padding: "5px 14px", borderRadius: "99px", marginBottom: "24px",
+          background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.25)",
+          fontSize: "11px", fontWeight: "700", color: "#ef4444", letterSpacing: "0.06em",
+        }}>
+          ⚡ BONDED AGENT REPUTATION ON ARC
+        </div>
+
+        <h1 style={{
+          fontSize: "clamp(36px, 5vw, 64px)",
+          fontWeight: "900", lineHeight: "1.05",
+          letterSpacing: "-0.03em", color: "#e8eaf6",
+          marginBottom: "16px",
+        }}>
+          If an AI agent cheats,<br />
+          <span style={{
+            background: "linear-gradient(90deg, #ef4444, #f87171)",
+            WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
+          }}>
+            it loses its deposit.
+          </span>
+        </h1>
+
+        <p style={{ fontSize: "16px", color: "#5c5f7a", marginBottom: "40px", fontWeight: "500" }}>
+          Automatically. On-chain. Claude adjudicates. No humans. No appeals.
+        </p>
+
+        {/* Live damage counters */}
+        <div style={{ display: "flex", justifyContent: "center", gap: "32px", flexWrap: "wrap" }}>
+          <Counter value={agents}       label="Agents bonded"     color="#818cf8" loading={loading} />
+          <Counter value={tvlDisplay}   label="USDC at stake"     color="#22d3ee" loading={loading} />
+          <Counter value={slashCount}   label="Cheaters slashed"  color={slashCount > 0 ? "#ef4444" : "#5c5f7a"} loading={loading} big={slashCount > 0} />
         </div>
       </div>
 
-      {/* Traction strip */}
-      <TractionStrip stats={stats ?? {}} chainStats={chainStats} loading={loading} />
+      {/* Body */}
+      <div style={{
+        flex: 1, display: "grid",
+        gridTemplateColumns: "1fr 360px",
+        gap: "24px", padding: "24px 32px",
+        maxWidth: "1400px", width: "100%", margin: "0 auto",
+        alignItems: "start",
+      }}>
+        {/* Left — verdict timeline */}
+        <VerdictHistory verdicts={sorted} />
 
-      {/* Body — verdict feed left (dominant), controls right */}
-      <div style={s.main}>
-        {/* Left column — verdict feed dominates */}
-        <div>
-          <div style={s.section}>Adjudication feed</div>
-          <VerdictHistory verdicts={sorted} />
-        </div>
+        {/* Right — controls */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+          <AgentCard stats={stats} chainStats={chainStats} onCycleComplete={poll} />
+          <USYCBondCard usyc={stats?.usyc} />
 
-        {/* Right column — controls */}
-        <div style={s.right}>
-          <div>
-            <div style={s.section}>Live agents</div>
-            <AgentCard stats={stats} chainStats={chainStats} onCycleComplete={poll} />
-          </div>
+          <button
+            onClick={() => setShowSystem(v => !v)}
+            style={{
+              background: "none", border: "none", padding: "4px 0",
+              fontSize: "10px", color: "#3a3c52", cursor: "pointer",
+              textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: "600",
+              textAlign: "left",
+            }}
+          >
+            {showSystem ? "▾" : "▸"} Technical details
+          </button>
 
-          <div>
-            <div style={s.section}>Phase 5 — Yield-Bearing Bond</div>
-            <USYCBondCard usyc={stats?.usyc} />
-          </div>
-
-          {/* Collapsible system info */}
-          <div>
-            <button style={s.collapseBtn} onClick={() => setShowSystem(v => !v)}>
-              {showSystem ? "▾" : "▸"} Technical details
-            </button>
-            {showSystem && (
-              <div style={{ ...s.infoBox, marginTop: "8px" }}>
-                <InfoRow k="Chain"       v="Arc testnet (5042002)" />
-                <InfoRow k="Protocol"    v="x402 nanopayments" />
-                <InfoRow k="Collateral"  v="USDC / USYC" />
-                <InfoRow k="Registry"    v="ArcIDRegistryV2 + DCAP" />
-                <InfoRow k="Adjudicator" v="Claude Sonnet 4.6" highlight />
-                <InfoRow k="Slash type"  v="On-chain (real USDC)" />
-                <InfoRow k="Consumer"    v={stats?.consumer ?? "0x8F43C6a0..."} />
-                {chainStats?.summary && <>
-                  <InfoRow k="Total agents"  v={chainStats.summary.totalAgents} />
-                  <InfoRow k="Active bonds"  v={chainStats.summary.activeAgents} />
-                  <InfoRow k="Total slashes" v={chainStats.summary.totalSlashes} red />
-                </>}
-              </div>
-            )}
-          </div>
+          {showSystem && (
+            <div style={{ background: "#0d0f1f", border: "1px solid #1a1b2e", borderRadius: "8px", padding: "14px" }}>
+              {[
+                ["Chain",       "Arc testnet (5042002)"],
+                ["Protocol",    "x402 nanopayments"],
+                ["Collateral",  "USDC / USYC"],
+                ["Registry",    "ArcIDRegistryV2 + DCAP"],
+                ["Adjudicator", "Claude Sonnet 4.6", "#818cf8"],
+                ["Slash type",  "On-chain (real USDC)"],
+                ["Consumer",    stats?.consumer ?? "0x8F43C6a0..."],
+              ].map(([k, v, accent]) => (
+                <div key={k} style={{
+                  display: "flex", justifyContent: "space-between",
+                  padding: "5px 0", borderBottom: "1px solid #08091a", fontSize: "11px",
+                }}>
+                  <span style={{ color: "#5c5f7a" }}>{k}</span>
+                  <span style={{ color: accent || "#e8eaf6", fontFamily: "'JetBrains Mono', monospace", fontSize: "10px", wordBreak: "break-all", maxWidth: "180px", textAlign: "right" }}>{v}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-function InfoRow({ k, v, highlight, red }) {
+function Counter({ value, label, color, loading, big }) {
   return (
-    <div style={s.infoRow}>
-      <span style={s.infoKey}>{k}</span>
-      <span style={{
-        ...s.infoVal,
-        color: highlight ? "#8b5cf6" : red ? "#ef4444" : "#e2e8f0",
-        wordBreak: "break-all", maxWidth: "200px", textAlign: "right",
-      }}>{v}</span>
+    <div style={{ textAlign: "center" }}>
+      <div style={{
+        fontSize: big ? "52px" : "36px",
+        fontWeight: "900",
+        fontFamily: "'JetBrains Mono', monospace",
+        color: loading ? "#1a1b2e" : color,
+        lineHeight: 1,
+        marginBottom: "6px",
+        transition: "color 0.4s",
+        textShadow: big ? `0 0 40px ${color}60` : "none",
+        animation: big ? "glow 2s ease-in-out infinite" : "none",
+      }}>
+        {loading ? "—" : (value ?? "—")}
+      </div>
+      <div style={{ fontSize: "11px", color: "#5c5f7a", fontWeight: "500" }}>{label}</div>
     </div>
   );
 }

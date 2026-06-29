@@ -4,113 +4,11 @@ const ARCSCAN     = "https://testnet.arcscan.app/tx/";
 const ORACLE_ADDR = "0xe2f7a0e6d9865c7dc9b5d19dcc11cbcb4655c661";
 const FAULT_MODES = ["stale", "null", "bad-sig"];
 
-const s = {
-  card: (slashed) => ({
-    background: slashed ? "rgba(239,68,68,0.05)" : "#111118",
-    border: slashed ? "1px solid rgba(239,68,68,0.3)" : "1px solid #1e1e2e",
-    borderRadius: "8px",
-    padding: "20px",
-    marginBottom: "12px",
-    transition: "background 0.5s, border-color 0.5s",
-  }),
-  header: {
-    display: "flex", alignItems: "flex-start",
-    justifyContent: "space-between", marginBottom: "14px",
-  },
-  title:   { fontSize: "10px", color: "#6b6b8a", letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: "600" },
-  address: {
-    fontSize: "11px", color: "#22d3ee", marginTop: "4px",
-    wordBreak: "break-all", fontFamily: "'JetBrains Mono', monospace",
-  },
-
-  badge: (status) => ({
-    padding: "3px 10px", borderRadius: "99px", fontSize: "11px",
-    fontWeight: "700", letterSpacing: "0.06em", flexShrink: 0,
-    background: status === "active"  ? "#34d39918"
-               : status === "slashed" ? "#ef444430"
-               :                        "#6b6b8a18",
-    color:      status === "active"  ? "#34d399"
-               : status === "slashed" ? "#ef4444"
-               :                        "#6b6b8a",
-    border: `1px solid ${
-               status === "active"  ? "#34d39940"
-               : status === "slashed" ? "#ef444460"
-               :                        "#6b6b8a40"}`,
-    transition: "all 0.4s ease",
-  }),
-
-  meta:      { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "16px" },
-  metaItem:  { background: "#0d1117", borderRadius: "6px", padding: "8px 12px" },
-  metaLabel: { fontSize: "10px", color: "#6b6b8a", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: "600" },
-  metaValue: { fontSize: "13px", marginTop: "3px", fontFamily: "'JetBrains Mono', monospace" },
-
-  faultSection: { marginBottom: "12px" },
-  faultLabel: {
-    fontSize: "10px", color: "#6b6b8a", marginBottom: "4px",
-    textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: "600",
-  },
-  faultSub: { fontSize: "10px", color: "#454b63", marginBottom: "8px", lineHeight: "1.5" },
-  controls: { display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" },
-  faultBtn: (active) => ({
-    background: active ? "#ef444425" : "#1e1e2e",
-    color:      active ? "#ef4444"   : "#9898b8",
-    border:     `1px solid ${active ? "#ef444450" : "#2e2e4e"}`,
-    padding: "4px 12px", borderRadius: "4px", fontSize: "11px",
-    fontFamily: "'JetBrains Mono', monospace", cursor: "pointer",
-    transition: "all 0.15s",
-  }),
-  resetBtn: {
-    background: "#1e1e2e", color: "#6b6b8a",
-    border: "1px solid #2e2e4e",
-    padding: "4px 12px", borderRadius: "4px",
-    fontSize: "11px", cursor: "pointer",
-  },
-
-  triggerBtn: (busy) => ({
-    width: "100%", padding: "12px", borderRadius: "6px",
-    fontSize: "13px", fontWeight: "700", letterSpacing: "0.02em",
-    cursor: busy ? "not-allowed" : "pointer",
-    background: busy ? "#1e1e2e" : "#ef4444",
-    color:      busy ? "#6b6b8a" : "#ffffff",
-    border:     `1px solid ${busy ? "#2e2e4e" : "#ef4444"}`,
-    marginTop: "4px", transition: "all 0.2s",
-    boxShadow: busy ? "none" : "0 0 24px rgba(239,68,68,0.3)",
-  }),
-  triggerSub: {
-    fontSize: "10px", color: "#6b6b8a", textAlign: "center",
-    marginTop: "6px", lineHeight: "1.5",
-  },
-
-  resultBox: {
-    background: "#0d1117", borderRadius: "6px",
-    padding: "12px 14px", marginTop: "12px",
-    fontSize: "11px", color: "#e2e8f0", lineHeight: "1.6",
-    border: "1px solid #1e1e2e",
-  },
-  resultLabel: { color: "#6b6b8a", marginRight: "6px" },
-  txLink: {
-    fontSize: "10px", color: "#22d3ee", wordBreak: "break-all",
-    marginTop: "4px", fontFamily: "'JetBrains Mono', monospace",
-    textDecoration: "none", fontWeight: "600",
-  },
-
-  agentList: { display: "flex", flexDirection: "column", gap: "6px" },
-  agentRow:  {
-    background: "#111118", border: "1px solid #1e1e2e",
-    borderRadius: "6px", padding: "10px 14px",
-    display: "flex", alignItems: "center", justifyContent: "space-between",
-  },
-  agentAddr: { fontSize: "11px", color: "#22d3ee", fontFamily: "'JetBrains Mono', monospace" },
-  agentMeta: { fontSize: "10px", color: "#6b6b8a", marginTop: "2px" },
-  agentRight:{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px" },
-  agentAmt:  { fontSize: "12px", fontWeight: "700", color: "#e2e8f0", fontFamily: "'JetBrains Mono', monospace" },
-};
-
 function fmt(addr)    { return addr ? addr.slice(0, 6) + "…" + addr.slice(-4) : "—"; }
 function fmtUsdc(raw) { return raw  ? `${(Number(raw) / 1e6).toFixed(2)} USDC` : "—"; }
-function agentStatus(agent) {
-  if (agent.active)  return "active";
-  if (agent.slashed) return "slashed";
+function agentStatus(a) {
+  if (a.active)  return "active";
+  if (a.slashed) return "slashed";
   return "no bond";
 }
 
@@ -132,9 +30,9 @@ export default function AgentCard({ stats, chainStats, onCycleComplete }) {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mode }),
       });
-      if (r.ok) { setActiveFault(mode); setMsg(`"${mode}" fault active — breach within ~12s`); }
-      else setMsg("Failed to set fault mode");
-    } catch (e) { setMsg(`Error: ${e.message}`); }
+      if (r.ok) { setActiveFault(mode); setMsg(`"${mode}" active`); }
+      else setMsg("Failed");
+    } catch { setMsg("Error"); }
     finally { setBusy(false); }
   }
 
@@ -142,8 +40,8 @@ export default function AgentCard({ stats, chainStats, onCycleComplete }) {
     setBusy(true);
     try {
       await fetch("/admin/fault/reset", { method: "POST" });
-      setActiveFault(null); setMsg("Fault cleared — oracle back to healthy");
-    } catch (e) { setMsg(`Error: ${e.message}`); }
+      setActiveFault(null); setMsg("");
+    } catch {}
     finally { setBusy(false); }
   }
 
@@ -156,143 +54,163 @@ export default function AgentCard({ stats, chainStats, onCycleComplete }) {
       const data = await r.json();
       if (!r.ok) { setMsg(`Error: ${data.error}`); return; }
       setCycleResult(data);
-      if (onCycleComplete) setTimeout(onCycleComplete, 1000);
+      if (onCycleComplete) setTimeout(onCycleComplete, 1200);
     } catch (e) { setMsg(`Error: ${e.message}`); }
     finally { setTriggering(false); }
   }
 
   return (
-    <div>
-      {/* Oracle agent card */}
-      <div style={s.card(isSlashed)}>
-        <div style={s.header}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+
+      {/* Main CTA card */}
+      <div style={{
+        background: "#0d0f1f",
+        border: "1px solid #1a1b2e",
+        borderRadius: "10px",
+        overflow: "hidden",
+      }}>
+        {/* Oracle identity */}
+        <div style={{
+          padding: "14px 16px",
+          borderBottom: "1px solid #1a1b2e",
+          display: "flex", justifyContent: "space-between", alignItems: "center",
+          background: isSlashed ? "rgba(239,68,68,0.07)" : "transparent",
+          transition: "background 0.5s",
+        }}>
           <div>
-            <div style={s.title}>Price Oracle</div>
-            <div style={s.address}>{stats?.oracle ?? ORACLE_ADDR}</div>
+            <div style={{ fontSize: "10px", color: "#5c5f7a", textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: "600" }}>Price Oracle</div>
+            <div style={{ fontSize: "10px", color: "#22d3ee", fontFamily: "'JetBrains Mono', monospace", marginTop: "3px" }}>
+              {fmt(stats?.oracle ?? ORACLE_ADDR)}
+            </div>
           </div>
-          <div style={s.badge(oracleAgent ? agentStatus(oracleAgent) : "no bond")}>
-            {oracleAgent?.active  ? "● ACTIVE"
-           : oracleAgent?.slashed ? "⚡ SLASHED"
-           :                        "○ NO BOND"}
-          </div>
+          <StatusBadge status={oracleAgent ? agentStatus(oracleAgent) : "no bond"} />
         </div>
 
-        <div style={s.meta}>
-          <MetaItem
-            label="Bond"
-            value={oracleAgent ? fmtUsdc(oracleAgent.amount) : "—"}
-            color={isSlashed ? "#ef4444" : "#22d3ee"}
-          />
-          <MetaItem label="SLA"         value="30s max age" />
-          <MetaItem label="Total calls" value={stats?.totalCalls ?? 0} />
-          <MetaItem
-            label="Slashes"
-            value={chainStats?.summary?.totalSlashes ?? stats?.slashCount ?? 0}
-            color={(chainStats?.summary?.totalSlashes ?? 0) > 0 ? "#ef4444" : undefined}
-          />
+        {/* Stats row */}
+        <div style={{ display: "flex", borderBottom: "1px solid #1a1b2e" }}>
+          {[
+            ["Bond",    fmtUsdc(oracleAgent?.amount), isSlashed ? "#ef4444" : "#22d3ee"],
+            ["Calls",   stats?.totalCalls ?? 0, null],
+            ["Slashes", chainStats?.summary?.totalSlashes ?? 0, (chainStats?.summary?.totalSlashes ?? 0) > 0 ? "#ef4444" : null],
+          ].map(([label, value, color]) => (
+            <div key={label} style={{ flex: 1, padding: "10px 14px", borderRight: "1px solid #1a1b2e" }}>
+              <div style={{ fontSize: "9px", color: "#5c5f7a", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: "600" }}>{label}</div>
+              <div style={{ fontSize: "13px", fontWeight: "700", color: color || "#e8eaf6", fontFamily: "'JetBrains Mono', monospace", marginTop: "2px" }}>{value}</div>
+            </div>
+          ))}
         </div>
 
         {/* Fault injection */}
-        <div style={s.faultSection}>
-          <div style={s.faultLabel}>Force a fault to trigger adjudication</div>
-          <div style={s.faultSub}>The consumer agent detects the fault and calls Claude within seconds.</div>
-          <div style={s.controls}>
-            {FAULT_MODES.map(m => (
-              <button key={m} style={s.faultBtn(activeFault === m)}
-                      onClick={() => triggerFault(m)} disabled={busy}>{m}</button>
-            ))}
-            <button style={s.resetBtn} onClick={resetFault} disabled={busy || !activeFault}>reset</button>
+        <div style={{ padding: "12px 16px", borderBottom: "1px solid #1a1b2e" }}>
+          <div style={{ fontSize: "9px", color: "#3a3c52", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: "600", marginBottom: "7px" }}>
+            Force a fault → Claude detects → slashes
           </div>
-          {msg && <div style={{ fontSize: "10px", color: "#6b6b8a", marginTop: "6px" }}>{msg}</div>}
+          <div style={{ display: "flex", gap: "5px", alignItems: "center", flexWrap: "wrap" }}>
+            {FAULT_MODES.map(m => (
+              <button key={m} onClick={() => triggerFault(m)} disabled={busy}
+                style={{
+                  padding: "4px 10px", fontSize: "10px", borderRadius: "4px",
+                  fontFamily: "'JetBrains Mono', monospace",
+                  background: activeFault === m ? "rgba(239,68,68,0.2)" : "#08091a",
+                  color:      activeFault === m ? "#ef4444" : "#5c5f7a",
+                  border:     `1px solid ${activeFault === m ? "rgba(239,68,68,0.4)" : "#1a1b2e"}`,
+                }}>
+                {m}
+              </button>
+            ))}
+            <button onClick={resetFault} disabled={busy || !activeFault}
+              style={{ padding: "4px 8px", fontSize: "10px", borderRadius: "4px", background: "#08091a", color: "#3a3c52", border: "1px solid #1a1b2e" }}>
+              reset
+            </button>
+            {msg && <span style={{ fontSize: "9px", color: "#5c5f7a" }}>{msg}</span>}
+          </div>
         </div>
 
         {/* Trigger button */}
-        <button style={s.triggerBtn(triggering)} onClick={handleTriggerCycle} disabled={triggering}>
-          {triggering ? "Claude is reading the evidence…" : "Oracle cheated. Slash it. →"}
-        </button>
-        {!triggering && (
-          <div style={s.triggerSub}>
-            Claude will adjudicate. Bond transfers on-chain. Watch it happen.
-          </div>
-        )}
-
-        {cycleResult && (
-          <div style={s.resultBox}>
-            <div>
-              <span style={s.resultLabel}>Verdict:</span>
-              <span style={{
-                color: cycleResult.verdict === "breach" ? "#ef4444" : "#34d399",
-                fontWeight: "700", fontFamily: "'JetBrains Mono', monospace",
-              }}>
-                {cycleResult.verdict?.toUpperCase()}
-              </span>
+        <div style={{ padding: "14px 16px" }}>
+          <button
+            onClick={handleTriggerCycle}
+            disabled={triggering}
+            style={{
+              width: "100%", padding: "14px",
+              fontSize: "13px", fontWeight: "800", letterSpacing: "0.01em",
+              borderRadius: "8px", border: "none",
+              background: triggering ? "#1a1b2e" : "linear-gradient(90deg, #ef4444, #dc2626)",
+              color: triggering ? "#5c5f7a" : "#fff",
+              boxShadow: triggering ? "none" : "0 4px 24px rgba(239,68,68,0.4)",
+              cursor: triggering ? "not-allowed" : "pointer",
+              transition: "all 0.2s",
+            }}
+          >
+            {triggering ? "Claude is reading the evidence…" : "Oracle cheated. Slash it. →"}
+          </button>
+          {!triggering && (
+            <div style={{ fontSize: "10px", color: "#3a3c52", textAlign: "center", marginTop: "7px" }}>
+              Claude adjudicates · bond transfers on-chain · live
             </div>
-            {cycleResult.slashTx && (
-              <div style={{ marginTop: "6px" }}>
-                <span style={s.resultLabel}>Seized →</span>
-                <a href={`${ARCSCAN}${cycleResult.slashTx}`} target="_blank"
-                   rel="noreferrer" style={s.txLink}>
-                  {cycleResult.slashTx.slice(0, 20)}… ↗
+          )}
+          {cycleResult && (
+            <div style={{ marginTop: "10px", padding: "10px 12px", background: "#08091a", borderRadius: "6px", border: "1px solid #1a1b2e" }}>
+              <div style={{ fontWeight: "700", fontFamily: "'JetBrains Mono', monospace", fontSize: "12px", color: cycleResult.verdict === "breach" ? "#ef4444" : "#34d399" }}>
+                {cycleResult.verdict?.toUpperCase()}
+              </div>
+              {cycleResult.slashTx && (
+                <a href={`${ARCSCAN}${cycleResult.slashTx}`} target="_blank" rel="noreferrer"
+                  style={{ fontSize: "10px", color: "#22d3ee", fontFamily: "'JetBrains Mono', monospace", textDecoration: "none", display: "block", marginTop: "4px" }}>
+                  {cycleResult.slashTx.slice(0, 24)}… ↗
                 </a>
-              </div>
-            )}
-            {cycleResult.reason && (
-              <div style={{ marginTop: "8px", color: "#9898b8", fontSize: "10px", lineHeight: "1.6" }}>
-                {cycleResult.reason.slice(0, 160)}…
-              </div>
-            )}
-          </div>
-        )}
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* All registered agents */}
+      {/* Registered agents */}
       {agents.length > 0 && (
-        <div>
-          <div style={{
-            fontSize: "10px", color: "#6b6b8a", textTransform: "uppercase",
-            letterSpacing: "0.1em", marginBottom: "8px", fontWeight: "600",
-          }}>
+        <div style={{ background: "#0d0f1f", border: "1px solid #1a1b2e", borderRadius: "10px", overflow: "hidden" }}>
+          <div style={{ padding: "10px 14px", borderBottom: "1px solid #1a1b2e", fontSize: "9px", color: "#3a3c52", textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: "600" }}>
             All Registered Agents ({agents.length})
           </div>
-          <div style={s.agentList}>
-            {agents.map(agent => {
-              const status   = agentStatus(agent);
-              const isOracle = agent.address.toLowerCase() === ORACLE_ADDR;
-              return (
-                <div key={agent.address} style={{
-                  ...s.agentRow,
-                  borderColor: isOracle ? "#22d3ee30" : "#1e1e2e",
-                  background: agent.slashed ? "rgba(239,68,68,0.04)" : "#111118",
-                }}>
-                  <div>
-                    <div style={s.agentAddr}>{fmt(agent.address)}</div>
-                    <div style={s.agentMeta}>
-                      {agent.agentId?.slice(0, 16)}{isOracle ? " · oracle" : ""}
-                    </div>
-                  </div>
-                  <div style={s.agentRight}>
-                    <div style={s.agentAmt}>{fmtUsdc(agent.amount)}</div>
-                    <div style={s.badge(status)}>
-                      {status === "active"  ? "● active"
-                     : status === "slashed" ? "⚡ slashed"
-                     :                        "○ no bond"}
-                    </div>
+          {agents.map(agent => {
+            const status   = agentStatus(agent);
+            const isOracle = agent.address.toLowerCase() === ORACLE_ADDR;
+            return (
+              <div key={agent.address} style={{
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                padding: "10px 14px", borderBottom: "1px solid #08091a",
+                background: agent.slashed ? "rgba(239,68,68,0.04)" : "transparent",
+              }}>
+                <div>
+                  <div style={{ fontSize: "10px", color: "#22d3ee", fontFamily: "'JetBrains Mono', monospace" }}>
+                    {fmt(agent.address)}{isOracle ? " · oracle" : ""}
                   </div>
                 </div>
-              );
-            })}
-          </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span style={{ fontSize: "11px", fontWeight: "700", color: "#e8eaf6", fontFamily: "'JetBrains Mono', monospace" }}>
+                    {fmtUsdc(agent.amount)}
+                  </span>
+                  <StatusBadge status={status} small />
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
   );
 }
 
-function MetaItem({ label, value, color }) {
+function StatusBadge({ status, small }) {
+  const color = status === "active" ? "#34d399" : status === "slashed" ? "#ef4444" : "#5c5f7a";
+  const label = status === "active" ? "● active" : status === "slashed" ? "⚡ slashed" : "○ no bond";
   return (
-    <div style={s.metaItem}>
-      <div style={s.metaLabel}>{label}</div>
-      <div style={{ ...s.metaValue, color: color || "#e2e8f0" }}>{value}</div>
+    <div style={{
+      padding: small ? "2px 8px" : "3px 10px",
+      borderRadius: "99px", fontSize: "10px", fontWeight: "700",
+      background: color + "18", color, border: `1px solid ${color}40`,
+      whiteSpace: "nowrap", transition: "all 0.4s",
+    }}>
+      {label}
     </div>
   );
 }
