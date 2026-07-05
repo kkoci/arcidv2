@@ -45,6 +45,21 @@ Three properties stacked. No competitor, including AOZ, has all three:
 
 ---
 
+## Circle Stack
+
+The oracle's payment path is wired to Circle's real infrastructure, not a mocked stand-in:
+
+| Component | What's used |
+|---|---|
+| **x402 protocol** | `GET /api/price` is x402-gated — an unpaid call gets a real `402 Payment Required` with signed payment requirements, not a stubbed error. |
+| **Circle Gateway Nanopayments** | `@circle-fin/x402-batching`'s `createGatewayMiddleware()` wraps the endpoint; payments are verified and settled (batched) by Circle's live testnet facilitator (`gateway-api-testnet.circle.com`). |
+| **Arc Testnet** | Chain ID `5042002` — Circle's own Arc network (`eip155:5042002` in Gateway's supported-networks list), using the same USDC precompile (`0x3600...0000`) as `ArcIDBond.sol`. |
+| **Seller Wallet** | The oracle's wallet (`0xe2F7a0E6d9865C7Dc9B5D19DCc11CBcb4655c661`) is the Gateway seller — receives $0.001 USDC per call, checkable live via `GET /api/gateway-balance`. |
+
+The frontend's "Circle Gateway Nanopayment" card pays for one real `/api/price` call and shows the seller's Gateway balance before → after.
+
+---
+
 ## Quick Start (3 terminals)
 
 ```bash
@@ -445,7 +460,7 @@ curl -H "X-Payment: dev" "http://localhost:3001/api/price?fault=null"
 curl -H "X-Payment: dev" "http://localhost:3001/api/price?fault=bad-sig"
 ```
 
-**x402 in production:** set `DEV_MODE=false` in `.env` — the service uses `x402-express` with Circle's facilitator to verify real USDC payments. `DEV_MODE=true` (default) accepts any `X-Payment` header for local testing.
+**x402 in production:** set `DEV_MODE=false` in `.env` — the service uses `@circle-fin/x402-batching`'s `createGatewayMiddleware()` to verify and settle real USDC payments via Circle Gateway's live testnet facilitator. `DEV_MODE=true` (default) accepts any `X-Payment` header for local testing.
 
 ---
 
