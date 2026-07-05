@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import AgentCard     from "./components/AgentCard.jsx";
 import VerdictHistory from "./components/VerdictHistory.jsx";
 import USYCBondCard  from "./components/USYCBondCard.jsx";
+import GatewayPaymentCard from "./components/GatewayPaymentCard.jsx";
 
 const POLL_MS = 5000;
 
@@ -138,6 +139,7 @@ export default function App() {
 
         <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
           <AgentCard stats={stats} chainStats={chainStats} onCycleComplete={poll} />
+          <GatewayPaymentCard />
           <USYCBondCard usyc={stats?.usyc} />
           <TechDetails stats={stats} />
         </div>

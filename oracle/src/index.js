@@ -17,7 +17,7 @@
 const express    = require("express");
 const config     = require("./config");
 const { signResponse } = require("./signer");
-const { getChainStats, triggerCycle, getGatewayBalance } = require("./chain");
+const { getChainStats, triggerCycle, getGatewayBalance, payForPriceViaGateway } = require("./chain");
 const { getAttestation } = require("./attest");
 
 const app = express();
@@ -250,6 +250,23 @@ app.post("/admin/trigger-cycle", async (req, res) => {
   }
 });
 
+// Demo-only: pay for one real /api/price call via Circle Gateway (separate from
+// the bad-sig trigger-cycle above — this exercises the actual Gateway payment
+// path, not the fault/slash loop, so it can run alongside it without interfering).
+app.post("/admin/demo-pay", async (req, res) => {
+  if (!isFaultAllowed(req)) return res.status(403).json({ error: "Requires X-Fault-Token" });
+  if (config.DEV_MODE) {
+    return res.status(400).json({ error: "Circle Gateway demo requires DEV_MODE=false (real facilitator)" });
+  }
+  try {
+    const result = await payForPriceViaGateway();
+    res.json(result);
+  } catch (e) {
+    console.error("[demo-pay]", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Admin: clear fault mode (Reset button)
 app.post("/admin/fault/reset", (req, res) => {
   if (!isFaultAllowed(req)) return res.status(403).json({ error: "Requires X-Fault-Token" });
@@ -330,6 +347,7 @@ app.listen(config.PORT, () => {
   console.log(`    POST /api/verdicts          (consumer pushes verdicts)`);
   console.log(`    POST /admin/fault           (set fault mode)`);
   console.log(`    POST /admin/fault/reset     (clear fault mode)`);
+  console.log(`    POST /admin/demo-pay        (pay for one /api/price call via Circle Gateway)`);
   console.log(`    GET  /api/attest            (TDX DCAP quote — real if USE_REAL_PHALA=true)`);
   console.log(`    GET  /api/chain-stats       (on-chain bond + agent state)`);
   console.log(`    GET  /api/gateway-balance   (Circle Gateway seller USDC balance)`);

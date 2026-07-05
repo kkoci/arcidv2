@@ -167,6 +167,44 @@ async function getGatewayBalance() {
   return data.balances?.[0] ?? null;
 }
 
+// Demo buyer buffer — deposited once into Gateway so repeated demo-pay clicks
+// don't each incur an on-chain deposit; only tops up when it runs low.
+const DEMO_BUYER_TOPUP_USDC = "0.05";
+
+// Pays for one /api/price call via Circle Gateway, using the consumer wallet
+// as the buyer. Used by /admin/demo-pay to make the Gateway integration
+// visible in the demo UI (before/after seller balance).
+async function payForPriceViaGateway() {
+  if (!config.CONSUMER_PRIVATE_KEY) throw new Error("CONSUMER_PRIVATE_KEY not configured");
+
+  const { GatewayClient } = require("@circle-fin/x402-batching/client");
+  const client = new GatewayClient({ chain: "arcTestnet", privateKey: config.CONSUMER_PRIVATE_KEY });
+
+  const sellerBefore = await getGatewayBalance();
+
+  const price = Number(config.PRICE_USDC);
+  const buyerBalances = await client.getBalances();
+  const available = Number(buyerBalances.gateway?.formattedAvailable ?? 0);
+  if (available < price) {
+    await client.deposit(DEMO_BUYER_TOPUP_USDC);
+  }
+
+  const priceUrl = `http://127.0.0.1:${config.PORT}/api/price`;
+  const { data, amount } = await client.pay(priceUrl);
+
+  const sellerAfter = await getGatewayBalance();
+
+  return {
+    price:    config.PRICE_USDC,
+    paidAtomic: amount != null ? String(amount) : null,
+    priceResponse: data,
+    seller: {
+      before: sellerBefore ?? { balance: "0", pendingBatch: "0" },
+      after:  sellerAfter  ?? { balance: "0", pendingBatch: "0" },
+    },
+  };
+}
+
 // ── Signature verification (same logic as consumer/src/verifier.js) ────────────
 
 function verifySignature(value, timestamp, expectedOracle, signature) {
@@ -334,4 +372,4 @@ async function triggerCycle() {
   return { verdict: verdict.verdict, reason: verdict.reason, slashTx, log };
 }
 
-module.exports = { getChainStats, triggerCycle, getGatewayBalance };
+module.exports = { getChainStats, triggerCycle, getGatewayBalance, payForPriceViaGateway };
