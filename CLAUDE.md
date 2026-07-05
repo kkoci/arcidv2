@@ -42,7 +42,7 @@ Before starting any task, read in this order:
 | Collateral (Phase 5) | USYC — Arc testnet: `0xe9185F0c5F296Ed1797AaE4238D26CCaBEadb86C` |
 | USYC mint/redeem | Teller contract: `0x9fdF14c5B14173D74C08Af27AebFf39240dC105A` |
 | Oracle hosting | Phala Cloud CVM (Intel TDX) — Phase 7 |
-| Frontend hosting | Vercel — `arcidv2.vercel.app` — Phase 7 |
+| Frontend hosting | Vercel — deployment in progress, no live URL yet — Phase 7 |
 
 ---
 
@@ -107,7 +107,7 @@ Phala Cloud CVM (Phase 7)
   └─ Live URL: https://1d6a697fdbc91c92c33a195103720c3a25685994-3001.dstack-pha-prod5.phala.network
 
 Vercel Frontend (Phase 7)
-  ├─ Deployed at https://arcidv2.vercel.app
+  ├─ Deployment in progress — no live URL yet
   ├─ frontend/vercel.json rewrites /api/* and /admin/* → Phala CVM URL (no CORS, no code change)
   └─ All fetch("/api/...") calls work identically locally and in prod
 ```

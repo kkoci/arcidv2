@@ -710,6 +710,6 @@ curl https://<cvm-hash>-3001.dstack-pha-prod5.phala.network/api/attest | jq .rea
 
 ## Links
 
-- Live frontend: [arcid-jade.vercel.app](https://arcid-jade.vercel.app)
+- Live frontend: in progress — not yet deployed
 - Arc testnet explorer: [testnet.arcscan.app](https://testnet.arcscan.app)
 - Lepton submission: [forms.gle/SMqLaw2pMGDe58LFA](https://forms.gle/SMqLaw2pMGDe58LFA)
