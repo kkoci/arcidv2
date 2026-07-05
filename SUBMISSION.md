@@ -177,9 +177,9 @@ http://localhost:5174  _(or Vercel URL if deployed)_
 ---
 
 ### Circle tools used
-- **x402 nanopayments:** Oracle service uses `x402-express` middleware. Every oracle call costs $0.001 USDC paid via Circle's Gateway. Consumer agent pays automatically, no human approval required.
+- **x402 nanopayments via Circle Gateway:** Oracle's `/api/price` is wrapped with `@circle-fin/x402-batching`'s `createGatewayMiddleware()`. Every oracle call costs $0.001 USDC, verified and settled (batched) via Circle Gateway's real testnet facilitator. Consumer agent pays automatically, no human approval required.
 - **USYC yield-bearing collateral:** ArcIDBond deployed with USYC as collateral token. Agents mint USYC via the Hashnote Teller on Arc testnet (`0x9fdF14c5B14173D74C08Af27AebFf39240dC105A`). Bond earns ~4.9% T-bill APY while staked.
-- **Arc testnet:** All contracts deployed on Arc (chain ID 421614). Uses ArcIDRegistry for TEE-gated identity.
+- **Arc testnet:** All contracts deployed on Arc (chain ID 5042002). Uses ArcIDRegistry for TEE-gated identity.
 
 ---
 

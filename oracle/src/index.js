@@ -17,7 +17,7 @@
 const express    = require("express");
 const config     = require("./config");
 const { signResponse } = require("./signer");
-const { getChainStats, triggerCycle } = require("./chain");
+const { getChainStats, triggerCycle, getGatewayBalance } = require("./chain");
 const { getAttestation } = require("./attest");
 
 const app = express();
@@ -80,14 +80,23 @@ function devX402Middleware(req, res, next) {
   next();
 }
 
+// Circle Gateway Nanopayments — x402 wrapped with batched settlement.
+// gatewayInstance is only set in production (DEV_MODE=false); used by
+// /api/gateway-balance to read the seller's live Gateway balance.
+let gatewayInstance = null;
+
 function loadProdX402() {
   try {
-    const { paymentMiddleware } = require("x402-express");
-    return paymentMiddleware(config.PRICE_USDC, config.ORACLE_WALLET_ADDRESS, {
-      network: config.ARC_NETWORK, facilitatorUrl: config.FACILITATOR_URL,
+    const { createGatewayMiddleware } = require("@circle-fin/x402-batching/server");
+    gatewayInstance = createGatewayMiddleware({
+      sellerAddress:  config.GATEWAY_SELLER_ADDRESS,
+      facilitatorUrl: config.GATEWAY_FACILITATOR_URL,
+      networks:       config.GATEWAY_NETWORK,
     });
+    console.log(`[gateway] Circle Gateway Nanopayments active — seller=${config.GATEWAY_SELLER_ADDRESS} network=${config.GATEWAY_NETWORK}`);
+    return gatewayInstance.require(`$${config.PRICE_USDC}`);
   } catch (e) {
-    console.warn("[x402] x402-express unavailable — using dev middleware:", e.message);
+    console.warn("[gateway] Circle Gateway unavailable — using dev middleware:", e.message);
     return devX402Middleware;
   }
 }
@@ -97,7 +106,7 @@ const x402 = config.DEV_MODE ? devX402Middleware : loadProdX402();
 if (config.DEV_MODE) {
   console.log("[x402] DEV_MODE=true — payment verification relaxed");
 } else {
-  console.log("[x402] Production mode — payments verified via Circle Gateway");
+  console.log("[x402] Production mode — payments verified + settled via Circle Gateway");
 }
 
 // ---------------------------------------------------------------------------
@@ -153,6 +162,22 @@ app.get("/api/attest", async (req, res) => {
   } catch (e) {
     console.error("[attest]", e.message);
     res.status(500).json({ error: e.message, real_tdx: config.USE_REAL_PHALA });
+  }
+});
+
+// Circle Gateway seller balance — live unified USDC balance for the demo UI
+app.get("/api/gateway-balance", async (req, res) => {
+  try {
+    const balance = await getGatewayBalance();
+    res.json({
+      seller:  config.GATEWAY_SELLER_ADDRESS,
+      network: config.GATEWAY_NETWORK,
+      price:   config.PRICE_USDC,
+      balance,
+    });
+  } catch (e) {
+    console.error("[gateway-balance]", e.message);
+    res.status(500).json({ error: e.message });
   }
 });
 
@@ -307,7 +332,8 @@ app.listen(config.PORT, () => {
   console.log(`    POST /admin/fault/reset     (clear fault mode)`);
   console.log(`    GET  /api/attest            (TDX DCAP quote — real if USE_REAL_PHALA=true)`);
   console.log(`    GET  /api/chain-stats       (on-chain bond + agent state)`);
-  console.log(`    GET  /api/price             (x402-gated)\n`);
+  console.log(`    GET  /api/gateway-balance   (Circle Gateway seller USDC balance)`);
+  console.log(`    GET  /api/price             (x402-gated — Circle Gateway in prod)\n`);
   console.log(`  Attestation: USE_REAL_PHALA=${config.USE_REAL_PHALA} PHALA_ENDPOINT=${config.PHALA_ENDPOINT}`);
 });
 

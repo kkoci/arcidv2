@@ -148,6 +148,25 @@ async function getChainStats({ force = false } = {}) {
   return chainStatsCache;
 }
 
+// ── Circle Gateway seller balance (unified USDC balance API) ──────────────────
+
+async function getGatewayBalance() {
+  if (!config.GATEWAY_SELLER_ADDRESS) return null;
+
+  const res = await fetch(`${config.GATEWAY_FACILITATOR_URL}/v1/balances`, {
+    method:  "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      token:   "USDC",
+      sources: [{ domain: config.GATEWAY_DOMAIN, depositor: config.GATEWAY_SELLER_ADDRESS }],
+    }),
+  });
+  if (!res.ok) throw new Error(`Gateway balance check failed: HTTP ${res.status}`);
+
+  const data = await res.json();
+  return data.balances?.[0] ?? null;
+}
+
 // ── Signature verification (same logic as consumer/src/verifier.js) ────────────
 
 function verifySignature(value, timestamp, expectedOracle, signature) {
@@ -315,4 +334,4 @@ async function triggerCycle() {
   return { verdict: verdict.verdict, reason: verdict.reason, slashTx, log };
 }
 
-module.exports = { getChainStats, triggerCycle };
+module.exports = { getChainStats, triggerCycle, getGatewayBalance };

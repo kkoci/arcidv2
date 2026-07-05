@@ -49,7 +49,8 @@ Before starting any task, read in this order:
 ## Environment Constraints
 
 **Arc testnet:**
-- Chain ID: 421614 (Arbitrum Sepolia under the hood)
+- Chain ID: 5042002 (verified via `eth_chainId` against the live RPC — this is Circle's own
+  Arc Testnet network, not Arbitrum Sepolia's 421614; do not reuse that chain ID anywhere)
 - RPC: `https://rpc.testnet.arc.network` (set via `ARC_RPC_URL`)
 - Explorer: `testnet.arcscan.app`
 - USDC faucet: `faucet.circle.com` — select Arc Testnet

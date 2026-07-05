@@ -18,6 +18,17 @@ module.exports = {
   ARC_NETWORK:   process.env.ARC_NETWORK   || "arc-testnet",
   FACILITATOR_URL: process.env.FACILITATOR_URL || "https://x402.org/facilitator",
 
+  // Circle Gateway Nanopayments — wraps /api/price in production (DEV_MODE=false).
+  // Network is CAIP-2 for Arc Testnet (chain id 5042002 — confirmed via eth_chainId
+  // against ARC_RPC_URL; this is Circle's own "Arc Testnet" in Gateway's supported-networks
+  // list, not Arbitrum Sepolia's 421614).
+  GATEWAY_FACILITATOR_URL: process.env.GATEWAY_FACILITATOR_URL || "https://gateway-api-testnet.circle.com",
+  GATEWAY_NETWORK:         process.env.GATEWAY_NETWORK         || "eip155:5042002",
+  // Gateway's CCTP domain id for Arc Testnet (used by the /v1/balances API — distinct from the CAIP-2 network id above).
+  GATEWAY_DOMAIN:          parseInt(process.env.GATEWAY_DOMAIN || "26", 10),
+  // Seller wallet that receives Gateway payments — defaults to the oracle's own wallet.
+  GATEWAY_SELLER_ADDRESS:  process.env.GATEWAY_SELLER_ADDRESS  || process.env.ORACLE_WALLET_ADDRESS,
+
   // SLA declared in every response — consumer agent checks against this
   MAX_AGE_SECONDS: parseInt(process.env.MAX_AGE_SECONDS || "30", 10),
 

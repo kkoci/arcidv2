@@ -2,7 +2,7 @@ require("@nomicfoundation/hardhat-toolbox");
 require("dotenv").config();
 
 const ARC_RPC_URL        = process.env.ARC_RPC_URL         || "https://rpc.testnet.arc.network";
-const ARC_CHAIN_ID       = parseInt(process.env.ARC_CHAIN_ID    || "421614", 10);
+const ARC_CHAIN_ID       = parseInt(process.env.ARC_CHAIN_ID    || "5042002", 10);
 const DEPLOYER_PRIVATE_KEY = process.env.DEPLOYER_PRIVATE_KEY ||
   "0x0000000000000000000000000000000000000000000000000000000000000001";
 
