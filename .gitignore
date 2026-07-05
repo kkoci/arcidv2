@@ -35,3 +35,6 @@ coverage.json
 Thumbs.db
 *.log
 dist/
+
+# Markdown files
+claude-code-arcid2-combined.md

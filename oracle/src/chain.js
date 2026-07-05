@@ -51,12 +51,35 @@ function getRegistryContract(provider) {
 // ── Paginated log query ────────────────────────────────────────────────────────
 
 const CHUNK = 9_000;
+const MAX_RETRIES = 4;
+const BASE_BACKOFF_MS = 500;
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Wraps a QuickNode/RPC call with exponential backoff so a rate-limited
+// response (or transient network error) doesn't turn into a retry storm.
+async function withBackoff(fn) {
+  let attempt = 0;
+  for (;;) {
+    try {
+      return await fn();
+    } catch (e) {
+      attempt++;
+      if (attempt > MAX_RETRIES) throw e;
+      const delay = BASE_BACKOFF_MS * 2 ** (attempt - 1);
+      console.warn(`[chain] RPC call failed (attempt ${attempt}/${MAX_RETRIES}): ${e.message} — retrying in ${delay}ms`);
+      await sleep(delay);
+    }
+  }
+}
 
 async function paginatedLogs(contract, filter, fromBlock, latest) {
   const events = [];
   for (let start = fromBlock; start <= latest; start += CHUNK) {
     const end  = Math.min(start + CHUNK - 1, latest);
-    const logs = await contract.queryFilter(filter, start, end);
+    const logs = await withBackoff(() => contract.queryFilter(filter, start, end));
     events.push(...logs);
   }
   return events;
@@ -79,7 +102,7 @@ async function getChainStats({ force = false } = {}) {
   const provider = getProvider();
   const bond     = getBondContract(provider);
   const registry = getRegistryContract(provider);
-  const latest   = await provider.getBlockNumber();
+  const latest   = await withBackoff(() => provider.getBlockNumber());
   const from     = config.DEPLOY_BLOCK || 0;
 
   // Registered agents
@@ -95,8 +118,8 @@ async function getChainStats({ force = false } = {}) {
   let activeCount = 0;
 
   for (const [address, agentId] of Object.entries(agentMap)) {
-    const info     = await bond.bonds(address);
-    const isActive = await bond.isActiveBondedAgent(address);
+    const info     = await withBackoff(() => bond.bonds(address));
+    const isActive = await withBackoff(() => bond.isActiveBondedAgent(address));
     if (isActive) { tvlRaw += info.amount; activeCount++; }
     agents.push({
       address,

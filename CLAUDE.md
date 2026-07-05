@@ -41,6 +41,8 @@ Before starting any task, read in this order:
 | Collateral (Phase 1) | USDC — Arc testnet: `0x3600000000000000000000000000000000000000` |
 | Collateral (Phase 5) | USYC — Arc testnet: `0xe9185F0c5F296Ed1797AaE4238D26CCaBEadb86C` |
 | USYC mint/redeem | Teller contract: `0x9fdF14c5B14173D74C08Af27AebFf39240dC105A` |
+| Oracle hosting | Phala Cloud CVM (Intel TDX) — Phase 7 |
+| Frontend hosting | Vercel — `arcidv2.vercel.app` — Phase 7 |
 
 ---
 
@@ -96,6 +98,17 @@ Frontend (Phase 4) ✅
 
 USYC Bond (Phase 5)
   └─ Same ArcIDBond.sol, deployed with USYC token address
+
+Phala Cloud CVM (Phase 7)
+  ├─ Oracle runs inside Intel TDX enclave on Phala dstack
+  ├─ GET /api/attest → returns TDX quote (prototype or real via USE_REAL_PHALA=true)
+  ├─ Quote embeds oracle wallet address as report_data (keccak256 of address → 32 bytes)
+  └─ Live URL: https://1d6a697fdbc91c92c33a195103720c3a25685994-3001.dstack-pha-prod5.phala.network
+
+Vercel Frontend (Phase 7)
+  ├─ Deployed at https://arcidv2.vercel.app
+  ├─ frontend/vercel.json rewrites /api/* and /admin/* → Phala CVM URL (no CORS, no code change)
+  └─ All fetch("/api/...") calls work identically locally and in prod
 ```
 
 ---
@@ -138,7 +151,26 @@ contracts/interfaces/ITeller.sol     Teller interface (deposit/redeem/sharePrice
 test/ArcIDBondUSYC.test.js           13 tests: face value, yield accrual, slash includes yield
 scripts/deploy_usyc.js               Deploy ArcIDBond with USYC; handles allowlist gracefully
 scripts/mint_usyc.js                 Mint USYC from USDC via Teller on Arc testnet
-frontend/src/components/USYCBondCard.jsx  Purple yield-bearing card with narrative + addresses
+frontend/src/components/USYCBondCard.jsx  USYC card — APY, T-bill backed, deployed address
+```
+
+Phase 7 files (Phala + Vercel deployment):
+```
+oracle/Dockerfile                    Node 18-alpine image; exposes port 3001
+oracle/docker-compose.yml            Local dev compose (USE_REAL_PHALA=false)
+oracle/docker-compose.phala.yml      Phala CVM compose (USE_REAL_PHALA=true, all vars as ${VAR})
+oracle/src/attest.js                 TDX attestation: prototype 592-byte quote OR real Phala dstack quote
+oracle/src/config.js                 Added USE_REAL_PHALA and PHALA_ENDPOINT vars
+frontend/vercel.json                 Vercel rewrites: /api/* /admin/* /health → Phala CVM URL
+```
+
+Frontend design overhaul (Phase 7):
+```
+frontend/src/index.css               Deep indigo palette (#0d0b24), grid overlay, glass utilities (.g / .gh)
+frontend/src/App.jsx                 No hero section — stats inline in sticky header; compact headline strip
+frontend/src/components/AgentCard.jsx      Glassmorphism card; orange slash button with glow
+frontend/src/components/VerdictHistory.jsx Verdict cards: first sentence bold lead + "▾ Full reasoning" toggle
+frontend/src/components/TractionStrip.jsx  Removed — replaced by inline header stats
 ```
 
 ---
@@ -196,6 +228,7 @@ the test that proves the moat. It must always pass. Do not weaken the assertion.
 | 4 | Frontend — live traction strip, fault injection, verdict feed | ✅ Complete |
 | 5 | USYC yield-bearing collateral — MockUSYC, ITeller, 13 new tests | ✅ Complete |
 | 6 | Video script, submission form answers, pre-submit checklist | ✅ Complete → SUBMISSION.md |
+| 7 | Phala Cloud (TDX CVM) + Vercel deploy + frontend visual overhaul | ✅ Complete |
 
 ---
 
@@ -244,6 +277,21 @@ the test that proves the moat. It must always pass. Do not weaken the assertion.
 2. `require(condition, "human-readable string")` for the TEE-gating check only — this is the screenshot string.
 3. Never use `assert()`.
 
+### On Phala / attestation (Phase 7 — complete)
+
+1. `oracle/src/attest.js` builds a 592-byte prototype TDX DCAP v4 quote for local dev. Set `USE_REAL_PHALA=true` to call Phala dstack at `PHALA_ENDPOINT/attestation/quote`.
+2. `report_data` = `keccak256(abi.encodePacked(address oracleWallet))` — 32 bytes, right-padded to 64 in the quote.
+3. The signature inside the quote uses raw ECDSA (no EIP-191 prefix) to be compatible with `DCAPVerifier._recover()`.
+4. The Phala CVM URL is hardcoded in `frontend/vercel.json`. Update it if the CVM is redeployed.
+5. To redeploy oracle to Phala: `docker build -t kkoci/arcid2-oracle:latest oracle/` → push → update CVM image → update `vercel.json` rewrite URL → `npx vercel --prod` from `frontend/`.
+
+### On frontend deployment (Phase 7 — complete)
+
+1. Deploy frontend: `cd frontend && npx vercel --prod`
+2. The Phala CVM URL in `frontend/vercel.json` must be updated whenever the CVM is redeployed.
+3. Local dev still uses `vite.config.js` proxy → `localhost:3001`. No changes needed.
+4. `TractionStrip.jsx` returns null — stats moved to the header. Do not restore it as a separate section.
+
 ### On USYC (Phase 5 — complete)
 
 1. The same `ArcIDBond.sol` supports USYC — deploy with `_collateralToken = USYC address`. No new contract code.
@@ -288,6 +336,37 @@ bond) adds attack surface and complicates slash accounting.
 The consumer agent adjudicator is the trust layer — it won't slash a provider over
 $0.001 for a $0.01 service. A minimum bond enforced on-chain adds complexity with
 no security gain at hackathon scale. Document as "configurable future upgrade."
+
+**Why Phala Cloud for the oracle?**
+Phala dstack runs the oracle inside an Intel TDX enclave. `GET /api/attest` returns a
+TDX DCAP v4 quote with the oracle wallet address embedded as `report_data`. This makes
+the TEE attestation claim tangible and verifiable — not just a narrative. Set
+`USE_REAL_PHALA=true` in the Phala compose file to get a real hardware quote.
+
+**Why Vercel rewrites instead of env-var URL switching?**
+`frontend/vercel.json` rewrites `/api/*` and `/admin/*` to the Phala CVM URL at the
+CDN layer. The React code never changes — all `fetch("/api/...")` calls work identically
+locally (proxied by Vite) and in production (rewritten by Vercel). No CORS, no build-time
+env vars, no conditional logic.
+
+**Why remove the hero/landing section from the frontend?**
+A landing-page hero above the dashboard creates a jarring two-section layout. Stats now
+live inline in the sticky header (bonded / at risk / slashed). The page opens directly
+to the adjudication feed. The "AI agents that cheat lose their deposit." headline is a
+compact one-liner below the header, not a full-viewport section.
+
+**Frontend color palette (Phase 7):**
+- Background: deep indigo `#0d0b24` — clearly purple, not black
+- Glowing orbs: orange top-right `rgba(251,113,3,.18)`, cyan bottom-left `rgba(34,217,232,.12)`
+- Slash / breach: `#fb7103` (vivid orange)
+- Active / OK: `#22d9e8` (bright cyan)
+- Oracle / system: `#c084fc` (soft violet)
+- Cards: glassmorphism — `rgba(255,255,255,0.05)` + `backdrop-filter:blur(16px)` over the indigo
+
+**Why split Claude's reasoning in VerdictHistory?**
+Long unbroken paragraphs are hard to scan. The first sentence becomes a bold 14px
+"finding" headline. The rest collapses behind a "▾ Full reasoning" toggle. Cards stay
+compact by default; full rationale is one click away.
 
 ---
 
