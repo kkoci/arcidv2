@@ -69,6 +69,42 @@ ship the USYC contract anyway (deployed + verified = stronger than a hand-wave).
 
 ---
 
+## Cost Safety
+
+**The consumer agent's main loop calls Claude on every cycle, unconditionally, on a timer —
+not on click.** `consumer/src/index.js`'s `main()` runs `while (true) { runCycle(); sleep(POLL_INTERVAL_MS) }`
+starting the instant `consumer && npm start` launches, independent of the oracle or frontend.
+`runCycle()` always calls `adjudicate()` (one Claude call) — there is no "response looks fine,
+skip the LLM call" path. Default `POLL_INTERVAL_MS=12000` (12s) → roughly **4-5 Claude calls/minute,
+~5,800-7,200/day**, for as long as the process is running, whether or not anyone is watching.
+
+- There is no `consumer/Dockerfile` — it was never meant to run as a persistent deployed service.
+  Only the oracle is containerized for Phala (`oracle/Dockerfile`).
+- **Never deploy the consumer agent as a persistent, unattended service** (Phala, a VM, a background
+  process, etc.). Run it locally, only for as long as it takes to record a demo or test a cycle,
+  then kill it (Ctrl+C).
+- For a live/recorded demo of the full slash loop without running the consumer's timer at all, use
+  `POST /admin/trigger-cycle` (oracle-side, one-shot, gated by `X-Fault-Token`) — it's a self-contained
+  version of the same fault → adjudicate → slash flow, fired once per call instead of every 12s forever.
+- If a live, always-on Phala deployment is wanted for judges to poke at, deploy the oracle alone.
+  `/api/price` only spends money when something actually pays for it via Circle Gateway; the two
+  routes that call Claude or move funds (`/admin/trigger-cycle`, `/admin/demo-pay`) are both gated
+  by `X-Fault-Token` and rate-limited (see below) — a random visitor can't trigger either.
+- **Set a real `FAULT_TOKEN` on Phala** before deploying — never leave the `dev-fault-token` default
+  in a public deployment; it's the only thing standing between a visitor and a real Claude/slash call.
+
+**Cost circuit breaker:** `oracle/src/index.js`'s `checkCooldown()` enforces a shared 5-minute
+cooldown across `/admin/trigger-cycle` and `/admin/demo-pay`, independent of the `X-Fault-Token`
+check. This bounds worst-case cost even if the token ever leaks or is guessed. The cooldown window
+is deliberately longer than a full `trigger-cycle` run (re-bond + slash + recharge, each waiting on
+testnet confirmation) — a shorter window doesn't actually stop back-to-back calls, since each one
+can individually outlast a too-short cooldown before the previous call even finishes. (This was
+found the hard way: an early 15s cooldown didn't block two real sequential `trigger-cycle` calls
+during testing, because one full cycle took longer than 15s to complete — both went through,
+each firing a real Claude call and a real on-chain slash on testnet.)
+
+---
+
 ## Architecture
 
 ```

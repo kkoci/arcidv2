@@ -118,6 +118,29 @@ function isFaultAllowed(req) {
 }
 
 // ---------------------------------------------------------------------------
+// Cost circuit breaker — bounds worst case if FAULT_TOKEN ever leaks or is
+// guessed. /admin/trigger-cycle calls Claude + does a real slash tx;
+// /admin/demo-pay moves real (if trivial) USDC. A shared cooldown caps how
+// often either can fire, independent of the token check above.
+// ---------------------------------------------------------------------------
+
+// 5 minutes — deliberately longer than a full trigger-cycle (re-bond + slash +
+// recharge, each waiting on testnet confirmation) so back-to-back calls can't
+// each individually clear the window before the prior one even finishes.
+const EXPENSIVE_COOLDOWN_MS = 5 * 60_000;
+let lastExpensiveCallAt = 0;
+
+function checkCooldown(res) {
+  const elapsed = Date.now() - lastExpensiveCallAt;
+  if (elapsed < EXPENSIVE_COOLDOWN_MS) {
+    res.status(429).json({ error: `Cooldown active — retry in ${Math.ceil((EXPENSIVE_COOLDOWN_MS - elapsed) / 1000)}s` });
+    return false;
+  }
+  lastExpensiveCallAt = Date.now();
+  return true;
+}
+
+// ---------------------------------------------------------------------------
 // Routes — no payment required
 // ---------------------------------------------------------------------------
 
@@ -226,6 +249,7 @@ app.post("/admin/fault", (req, res) => {
 // Trigger the full slash loop: re-bond → bad-sig → Claude → on-chain slash → recharge
 app.post("/admin/trigger-cycle", async (req, res) => {
   if (!isFaultAllowed(req)) return res.status(403).json({ error: "Requires X-Fault-Token" });
+  if (!checkCooldown(res)) return;
   console.log("[trigger-cycle] Starting slash demo loop...");
   try {
     const result = await triggerCycle();
@@ -258,6 +282,7 @@ app.post("/admin/demo-pay", async (req, res) => {
   if (config.DEV_MODE) {
     return res.status(400).json({ error: "Circle Gateway demo requires DEV_MODE=false (real facilitator)" });
   }
+  if (!checkCooldown(res)) return;
   try {
     const result = await payForPriceViaGateway();
     res.json(result);
