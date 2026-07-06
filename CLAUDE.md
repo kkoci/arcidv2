@@ -42,7 +42,7 @@ Before starting any task, read in this order:
 | Collateral (Phase 5) | USYC — Arc testnet: `0xe9185F0c5F296Ed1797AaE4238D26CCaBEadb86C` |
 | USYC mint/redeem | Teller contract: `0x9fdF14c5B14173D74C08Af27AebFf39240dC105A` |
 | Oracle hosting | Phala Cloud CVM (Intel TDX) — Phase 7 |
-| Frontend hosting | Vercel — deployment in progress, no live URL yet — Phase 7 |
+| Frontend hosting | Vercel — `frontend-five-eta-43.vercel.app` — Phase 7 |
 
 ---
 
@@ -140,10 +140,11 @@ Phala Cloud CVM (Phase 7)
   ├─ Oracle runs inside Intel TDX enclave on Phala dstack
   ├─ GET /api/attest → returns TDX quote (prototype or real via USE_REAL_PHALA=true)
   ├─ Quote embeds oracle wallet address as report_data (keccak256 of address → 32 bytes)
-  └─ Live URL: https://1d6a697fdbc91c92c33a195103720c3a25685994-3001.dstack-pha-prod5.phala.network
+  └─ Live URL: https://9c3a144f929db3e05d05bb03839a04527bda9841-3001.dstack-pha-prod5.phala.network
 
 Vercel Frontend (Phase 7)
-  ├─ Deployment in progress — no live URL yet
+  ├─ Deployed at https://frontend-five-eta-43.vercel.app (Vercel project "frontend" —
+  |    the earlier "arcidv2" project no longer exists, was deleted/inaccessible)
   ├─ frontend/vercel.json rewrites /api/* and /admin/* → Phala CVM URL (no CORS, no code change)
   └─ All fetch("/api/...") calls work identically locally and in prod
 ```
@@ -316,7 +317,7 @@ the test that proves the moat. It must always pass. Do not weaken the assertion.
 
 ### On Phala / attestation (Phase 7 — complete)
 
-1. `oracle/src/attest.js` builds a 592-byte prototype TDX DCAP v4 quote for local dev. Set `USE_REAL_PHALA=true` to call Phala dstack at `PHALA_ENDPOINT/attestation/quote`.
+1. `oracle/src/attest.js` builds a 592-byte prototype TDX DCAP v4 quote for local dev. Set `USE_REAL_PHALA=true` to connect to the dstack guest agent over its Unix socket via `@phala/dstack-sdk` (`DstackClient`) — the agent is **not** exposed over TCP/HTTP; an earlier version of this file assumed an HTTP fetch to `PHALA_ENDPOINT`, which fails with a connection error in production. The socket must be volume-mounted into the container (`oracle/docker-compose.phala.yml`'s `volumes:` — currently guesses `/var/run/dstack.sock`; if wrong for a given dstack version, `/var/run/tappd.sock` is the older name to try).
 2. `report_data` = `keccak256(abi.encodePacked(address oracleWallet))` — 32 bytes, right-padded to 64 in the quote.
 3. The signature inside the quote uses raw ECDSA (no EIP-191 prefix) to be compatible with `DCAPVerifier._recover()`.
 4. The Phala CVM URL is hardcoded in `frontend/vercel.json`. Update it if the CVM is redeployed.

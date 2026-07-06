@@ -377,7 +377,7 @@ app.listen(config.PORT, () => {
   console.log(`    GET  /api/chain-stats       (on-chain bond + agent state)`);
   console.log(`    GET  /api/gateway-balance   (Circle Gateway seller USDC balance)`);
   console.log(`    GET  /api/price             (x402-gated — Circle Gateway in prod)\n`);
-  console.log(`  Attestation: USE_REAL_PHALA=${config.USE_REAL_PHALA} PHALA_ENDPOINT=${config.PHALA_ENDPOINT}`);
+  console.log(`  Attestation: USE_REAL_PHALA=${config.USE_REAL_PHALA}${config.USE_REAL_PHALA ? " (dstack Unix socket, auto-probed by @phala/dstack-sdk)" : ""}`);
 });
 
 module.exports = app;

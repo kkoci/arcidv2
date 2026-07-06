@@ -2,8 +2,13 @@
 /**
  * attest.js — TDX DCAP attestation for the oracle service.
  *
- * USE_REAL_PHALA=true  → calls the Phala dstack agent at PHALA_ENDPOINT/attestation/quote
- *                        for a real Intel TDX quote from the running CVM.
+ * USE_REAL_PHALA=true  → connects to the Phala dstack guest agent over its Unix domain
+ *                        socket (via @phala/dstack-sdk's DstackClient) for a real Intel
+ *                        TDX quote from the running CVM. The agent is NOT exposed over
+ *                        TCP/HTTP — an earlier version of this file assumed a PHALA_ENDPOINT
+ *                        HTTP fetch, which fails with a connection-level error inside the
+ *                        CVM's isolated container network, since there's no TCP listener to
+ *                        reach at all, over any address.
  * USE_REAL_PHALA=false → builds a structurally-valid prototype TDX v4 quote self-signed
  *                        with the oracle private key (safe for local dev; passes DCAPVerifier).
  *
@@ -32,6 +37,17 @@ function buildPrototypeQuote(reportData32, mrtd48) {
   return quote;
 }
 
+// Lazily constructed — DstackClient() auto-probes the guest agent's Unix socket
+// (/var/run/dstack.sock, /run/dstack.sock, and legacy variants) at first use.
+let dstackClient = null;
+function getDstackClient() {
+  if (!dstackClient) {
+    const { DstackClient } = require("@phala/dstack-sdk");
+    dstackClient = new DstackClient();
+  }
+  return dstackClient;
+}
+
 async function getAttestation() {
   const oracleAddress = config.ORACLE_WALLET_ADDRESS;
 
@@ -54,27 +70,23 @@ async function getAttestation() {
   const sig65      = ethers.concat([rawSig.r, rawSig.s, ethers.toBeHex(rawSig.v, 1)]);
 
   if (config.USE_REAL_PHALA) {
-    const endpoint = config.PHALA_ENDPOINT;
-    const resp = await fetch(`${endpoint}/attestation/quote`, {
-      method:  "POST",
-      headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ report_data: "0x" + reportData32.toString("hex") }),
-    });
-    if (!resp.ok) {
-      const text = await resp.text().catch(() => resp.status);
-      throw new Error(`Phala dstack returned ${resp.status}: ${text}`);
-    }
-    const body       = await resp.json();
-    const quoteB64   = body.quote ?? body.Quote;
-    if (!quoteB64) throw new Error("Phala response missing 'quote' field");
-    const quoteHex   = "0x" + Buffer.from(quoteB64, "base64").toString("hex");
+    const client = getDstackClient();
+    const { quote } = await client.getQuote(reportData32);
+    const quoteHex  = quote.startsWith("0x") ? quote : "0x" + quote;
+
+    // Real mrtd lives inside the real quote at the standard TDX DCAP v4 offset
+    // (same layout as the prototype below) — extract rather than recompute.
+    const quoteBytes = Buffer.from(quoteHex.slice(2), "hex");
+    const realMrtd = quoteBytes.length >= MRTD_OFFSET + 48
+      ? "0x" + quoteBytes.subarray(MRTD_OFFSET, MRTD_OFFSET + 48).toString("hex")
+      : null;
 
     return {
       quote:           quoteHex,
       report_data:     "0x" + reportData32.toString("hex"),
       report_data_sig: sig65,
       attested_signer: oracleAddress,
-      mrtd:            "0x" + mrtd48.toString("hex"),
+      mrtd:            realMrtd,
       real_tdx:        true,
     };
   }

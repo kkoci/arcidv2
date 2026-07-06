@@ -654,7 +654,10 @@ The oracle service is containerized and ready to deploy to a Phala TDX CVM, prod
 `GET /api/attest` is a new endpoint on the oracle. When `USE_REAL_PHALA=true`:
 1. Computes `report_data = keccak256(oracle_wallet_address)` (32 bytes)
 2. Signs it raw with the oracle private key (no EIP-191, matching `DCAPVerifier._recover()`)
-3. POSTs to `http://127.0.0.1:9000/attestation/quote` — the Phala dstack agent running inside the CVM
+3. Calls the Phala dstack guest agent via `@phala/dstack-sdk`'s `DstackClient`, which connects over
+   the agent's Unix domain socket — **not** TCP/HTTP. The socket must be volume-mounted into the
+   container (see `oracle/docker-compose.phala.yml`); the agent isn't reachable at any address
+   otherwise, regardless of `127.0.0.1` vs. the container's host.
 4. Returns `{ quote, report_data, report_data_sig, attested_signer, mrtd, real_tdx: true }`
 
 When `USE_REAL_PHALA=false` (default, local dev), the same endpoint returns a structurally-valid TDX v4 prototype quote — same format, self-signed, passes `DCAPVerifier` on-chain.
@@ -664,8 +667,8 @@ When `USE_REAL_PHALA=false` (default, local dev), the same endpoint returns a st
 | File | Purpose |
 |------|---------|
 | `oracle/Dockerfile` | Node 18 alpine, `linux/amd64`, exposes port 3001 |
-| `oracle/src/attest.js` | Attestation logic — real Phala path + prototype fallback |
-| `oracle/.env.example` | Documents `USE_REAL_PHALA` and `PHALA_ENDPOINT` |
+| `oracle/src/attest.js` | Attestation logic — real Phala path (dstack Unix socket via `@phala/dstack-sdk`) + prototype fallback |
+| `oracle/.env.example` | Documents `USE_REAL_PHALA` |
 
 ### Build & deploy commands
 
@@ -682,8 +685,9 @@ docker push kkoci/arcid2-oracle:latest
 #    → Port mapping: 3001
 #    → Environment variables (from oracle/.env, plus):
 #         USE_REAL_PHALA=true
-#         PHALA_ENDPOINT=http://127.0.0.1:9000   (dstack default, no change needed)
 #         PORT=3001
+#    → Compose must volume-mount the dstack guest agent's Unix socket (see
+#      oracle/docker-compose.phala.yml) — it's not reachable over TCP/HTTP
 ```
 
 ### After deploy
@@ -710,6 +714,6 @@ curl https://<cvm-hash>-3001.dstack-pha-prod5.phala.network/api/attest | jq .rea
 
 ## Links
 
-- Live frontend: in progress — not yet deployed
+- Live frontend: [frontend-five-eta-43.vercel.app](https://frontend-five-eta-43.vercel.app)
 - Arc testnet explorer: [testnet.arcscan.app](https://testnet.arcscan.app)
 - Lepton submission: [forms.gle/SMqLaw2pMGDe58LFA](https://forms.gle/SMqLaw2pMGDe58LFA)

@@ -4,10 +4,16 @@ services:
     platform: linux/amd64
     ports:
       - "3001:3001"
+    volumes:
+      # The dstack guest agent isn't exposed over TCP at all — it's a Unix domain socket
+      # on the CVM host. @phala/dstack-sdk's DstackClient() auto-probes /var/run/dstack.sock
+      # inside the container, so mount the host socket at that same path. If this dstack
+      # version uses the older /var/run/tappd.sock name instead, change the host-side path
+      # (left of the colon) accordingly — the container-side path should stay as-is.
+      - /var/run/dstack.sock:/var/run/dstack.sock
     environment:
       PORT: "3001"
       USE_REAL_PHALA: "true"
-      PHALA_ENDPOINT: "http://127.0.0.1:9000"
       # Injected via Phala Cloud dashboard (Secrets tab) — do not commit values here:
       ORACLE_PRIVATE_KEY: "${ORACLE_PRIVATE_KEY}"
       ORACLE_WALLET_ADDRESS: "${ORACLE_WALLET_ADDRESS}"

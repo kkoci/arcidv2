@@ -2,15 +2,15 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://1d6a697fdbc91c92c33a195103720c3a25685994-3001.dstack-pha-prod5.phala.network/api/:path*"
+      "destination": "https://9c3a144f929db3e05d05bb03839a04527bda9841-3001.dstack-pha-prod5.phala.network/api/:path*"
     },
     {
       "source": "/admin/:path*",
-      "destination": "https://1d6a697fdbc91c92c33a195103720c3a25685994-3001.dstack-pha-prod5.phala.network/admin/:path*"
+      "destination": "https://9c3a144f929db3e05d05bb03839a04527bda9841-3001.dstack-pha-prod5.phala.network/admin/:path*"
     },
     {
       "source": "/health",
-      "destination": "https://1d6a697fdbc91c92c33a195103720c3a25685994-3001.dstack-pha-prod5.phala.network/health"
+      "destination": "https://9c3a144f929db3e05d05bb03839a04527bda9841-3001.dstack-pha-prod5.phala.network/health"
     }
   ]
 }

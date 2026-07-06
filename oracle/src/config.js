@@ -52,8 +52,8 @@ module.exports = {
   MODEL:                  process.env.MODEL                  || "claude-sonnet-4-6",
 
   // Phala Cloud TDX attestation (Phase 7)
-  // USE_REAL_PHALA=true  → call dstack at PHALA_ENDPOINT/attestation/quote (inside CVM only)
+  // USE_REAL_PHALA=true  → connect to the dstack guest agent's Unix socket via
+  //                        @phala/dstack-sdk (inside CVM only; socket must be volume-mounted)
   // USE_REAL_PHALA=false → return structurally-valid prototype quote (local dev default)
   USE_REAL_PHALA:  process.env.USE_REAL_PHALA === "true",
-  PHALA_ENDPOINT:  process.env.PHALA_ENDPOINT  || "http://127.0.0.1:9000",
 };
