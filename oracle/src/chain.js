@@ -252,7 +252,8 @@ const VERDICT_TOOL = {
 const SYSTEM_PROMPT = `You are an autonomous adjudication agent for the ArcID bonded reputation system.
 Evaluate whether a bonded oracle provider met its SLA for a paid query.
 SLA: (1) timestamp within max_age_seconds, (2) non-null parseable value, (3) ECDSA signature recovers to oracle wallet.
-Return ok/breach/uncertain with written rationale. Breach rationale goes on-chain in AgentSlashed event.`;
+Return ok/breach/uncertain with written rationale. Breach rationale goes on-chain in AgentSlashed event.
+The rationale is displayed as plain text in a UI — write plain prose, no markdown (no **bold**, no lists).`;
 
 async function adjudicate({ value, timestamp, signature, ageSeconds, sigValid, sigError }) {
   if (!config.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not set in oracle/.env");

@@ -87,7 +87,10 @@ When a breach IS clear:
   - bad/missing signature with valid data → provider cannot prove authorship of this response
   - null value AND null signature → completely malformed; could be crash (uncertain) or pattern (breach)
 
-Always reason step by step in your rationale before calling deliver_verdict.`;
+Always reason step by step in your rationale before calling deliver_verdict.
+
+The "reason" field is displayed as plain text in a UI and logged verbatim on-chain — write it as
+plain prose sentences. Do not use markdown (no **bold**, no bullet lists, no headers).`;
 
 /**
  * @param {object} opts
