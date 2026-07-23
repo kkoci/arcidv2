@@ -262,6 +262,46 @@ cost) and confirms the exact revert message. If **registered**: reports its `age
 
 ---
 
+## Trust Boundary — TEE Attestation vs. Payment Settlement
+
+This is an explicit statement of a split that already exists in the code, written
+down so it reads as an intentional design decision rather than an omission once
+payment execution (below) is built on top of it.
+
+**What actually runs inside the TDX enclave:** exactly one thing — proving that a
+given wallet key belongs to code running inside a genuine TDX CVM with a specific
+measured code identity (`mrtd`). That's `GET /api/attest` in `oracle/src/attest.js`:
+when `USE_REAL_PHALA=true` it calls the Phala dstack guest agent over its Unix
+socket to produce a real hardware-backed DCAP quote; the resulting quote is what
+`ArcIDRegistryV2.registerAgent()` verifies on-chain via `DCAPVerifier`. This is the
+entire hardware root of trust in the system.
+
+**What runs outside it, as ordinary application code:**
+- **Price signing** (`GET /api/price`) — the oracle signs `(value, timestamp)` with
+  the same wallet key, but the signing call itself isn't re-attested per request.
+  Trust here is *transitive*: the wallet was proven TEE-resident once at
+  registration time, so signatures from it are attributable, not because every
+  signature re-enters the enclave.
+- **LLM adjudication** — Phase 3's consumer agent runs as a plain local Node
+  process, never deployed to Phala. Claude's verdict reasoning has no TEE
+  involvement at all.
+- **x402 / Circle Gateway payments** — both `createGatewayMiddleware()`
+  (oracle-side, `oracle/src/index.js`) and `GatewayClient`
+  (`payForPriceViaGateway()` in `oracle/src/chain.js`, used by `/admin/demo-pay`)
+  are plain ethers/Node code paths. Even the Gateway call that happens to execute
+  inside the oracle's own container never touches the dstack socket — only
+  `attest.js` does. This is the same "sidecar" relationship the Gateway payment
+  code already has to the x402-gated route it sits next to: adjacent in the
+  process, but a separate trust tier.
+
+**Why this matters going forward:** any new payment-execution logic (settlement
+calls triggered by a verdict) belongs in this second tier by construction — it
+should live in the consumer agent's post-verdict handler, not inside the oracle,
+and it inherits trust from the already-attested identity and the on-chain
+bond/slash contract, not from any new TEE involvement of its own.
+
+---
+
 ## Phase Status
 
 | Phase | What | Status |
