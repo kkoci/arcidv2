@@ -6,6 +6,13 @@
 
 Addresses Lepton's **Prior Art #8** (bonded agent reputation) and **RFB 3** (agent-to-agent nanopayment networks). The trust layer Prior Art #8 called "nearly empty" — this fills it.
 
+> **Transparency note:** the submission form locked 2026-07-06. Payment
+> execution on a clean verdict (real Circle Gateway settlement +
+> `ArcIDBond.recordSettlement()`) was added afterward, during the (extended,
+> ongoing) event window — judges track commit activity through the end of
+> the event, and no winner date had been announced at the time. See
+> [CHANGELOG.md](CHANGELOG.md) for the full breakdown, commit-by-commit.
+
 ---
 
 ## Live Proof — Real Slash on Arc Testnet
@@ -343,8 +350,9 @@ bond/slash contract, not from any new TEE involvement of its own.
 | 5 | USYC yield-bearing collateral — Teller, 13 tests, deploy scripts | ✅ Complete |
 | 6 | Video script, submission form, checklist | ✅ Complete → [SUBMISSION.md](SUBMISSION.md) |
 | 7 | `ArcIDRegistryV2.sol` + `DCAPVerifier.sol` — native on-chain registry with real DCAP verification; `deploy:standalone` registers + bonds in one command; 10 new tests | ✅ Complete |
+| Post-submission | Payment execution — real Circle Gateway settlement + `ArcIDBond.recordSettlement()` audit trail on a clean verdict; 7 new tests | ✅ Complete → [CHANGELOG.md](CHANGELOG.md) |
 
-**Test suite:** 50 passing (`npm test`) — no external RPC, no `.env` required.
+**Test suite:** 57 passing (`npm test`) — no external RPC, no `.env` required.
 
 ---
 
@@ -365,7 +373,7 @@ The Circle-specific moat: **`ArcIDBond.sol` already supports any ERC-20** — th
 | `scripts/mint_usyc.js` | Mint USYC from USDC via Teller on Arc testnet |
 | `frontend/src/components/USYCBondCard.jsx` | Purple "yield-bearing" card with narrative + deployed contract address |
 
-**Test suite highlights (`npm test` — 50 passing total):**
+**Test suite highlights (`npm test` — 57 passing total):**
 
 ```
 USYC bond face value is $5.00 USDC at deposit time (sharePrice = $1.00)
@@ -689,6 +697,7 @@ constructor(address _collateralToken, address _registry)
 |----------|-----|-------------|
 | `postBond(uint256 amount)` | TEE-verified agent | Transfers collateral to contract. Reverts for unverified wallets. |
 | `slash(address agent, address consumer, string reason)` | authorizedSlasher | Transfers bond to consumer. `reason` is the LLM rationale. |
+| `recordSettlement(address agent, address consumer, uint256 amount, bytes32 verdictHash)` | authorizedSlasher | Post-submission (see [CHANGELOG.md](CHANGELOG.md)). Does NOT move funds — logs an off-chain Gateway settlement against a clean verdict. Reverts if the bond is already slashed. |
 | `withdrawBond()` | Bond holder | Returns unslashed bond to agent. |
 | `isActiveBondedAgent(address)` | view | True if agent has active (unslashed) bond. |
 | `setAuthorizedSlasher(address)` | owner | Rotate the consumer agent wallet. |
@@ -699,6 +708,7 @@ constructor(address _collateralToken, address _registry)
 |-------|------|
 | `BondPosted(agent, amount, token)` | Successful `postBond()` |
 | `AgentSlashed(agent, consumer, amount, reason)` | Successful `slash()` |
+| `PaymentSettled(agent, consumer, amount, verdictHash)` | Successful `recordSettlement()` — post-submission (see [CHANGELOG.md](CHANGELOG.md)) |
 | `BondWithdrawn(agent, amount)` | Successful `withdrawBond()` |
 | `SlasherUpdated(oldSlasher, newSlasher)` | `setAuthorizedSlasher()` called |
 

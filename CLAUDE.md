@@ -173,6 +173,7 @@ consumer/src/adjudicator.js         LLM adjudication via Claude tool_use (struct
 consumer/src/verifier.js            Signature verification (ethers.verifyMessage)
 consumer/src/oracle.js              x402 oracle client (dev bypass + prod path)
 consumer/src/slasher.js             ArcIDBond.slash() on-chain caller
+consumer/src/settlement.js          Post-submission: Gateway settlement + ArcIDBond.recordSettlement() on clean verdict
 consumer/src/config.js              Consumer env config
 frontend/src/App.jsx                Phase 4: Root component — polls /api/stats + /api/verdicts every 5s
 frontend/src/components/TractionStrip.jsx  5-stat header row
@@ -211,6 +212,13 @@ frontend/src/components/VerdictHistory.jsx Verdict cards: first sentence bold le
 frontend/src/components/TractionStrip.jsx  Removed — replaced by inline header stats
 ```
 
+Payment execution files (post-submission — see CHANGELOG.md):
+```
+consumer/src/settlement.js           executeSettlement() — Gateway payment + recordSettlement() on clean verdict
+scripts/cli/settle.js                npm run bond:settle — standalone recordSettlement() demo/test CLI
+CHANGELOG.md                         Transparency log for post-deadline commits
+```
+
 ---
 
 ## ArcIDBond Contract Events
@@ -222,12 +230,13 @@ These events are the source of truth for the frontend live counters.
 |-------|--------|-------------|
 | `BondPosted(agent, amount, token)` | agent wallet, USDC amount (6 dec), token addr | TVL counter, agent card badge |
 | `AgentSlashed(agent, consumer, amount, reason)` | all parties, amount, LLM rationale | Slash counter, badge flip, rationale display |
+| `PaymentSettled(agent, consumer, amount, verdictHash)` | all parties, amount, off-chain verdict hash | Post-submission (see CHANGELOG.md) — "no breach" counterpart to `AgentSlashed`; does not move funds |
 | `BondWithdrawn(agent, amount)` | agent, amount | TVL update |
 | `SlasherUpdated(old, new)` | wallet addrs | Admin audit |
 
 ---
 
-## Test Suite (40 passing — run with `npm test`)
+## Test Suite (57 passing — run with `npm test`)
 
 ```
 test/ArcIDBond.test.js
@@ -237,6 +246,9 @@ test/ArcIDBond.test.js
   slash                   7   USDC transfer to consumer, mark slashed, AgentSlashed event
                               with rationale, NotAuthorizedSlasher, NoBondFound,
                               AlreadySlashed, isActiveBondedAgent after slash
+  recordSettlement        7   PaymentSettled event, no funds moved, NotAuthorizedSlasher,
+                              NoBondFound, AlreadySlashed, AlreadySettled, mutually
+                              exclusive with slash() (post-submission — see CHANGELOG.md)
   withdrawBond            5   success, BondWithdrawn event, record delete, NoBondFound, AlreadySlashed
   isActiveBondedAgent     3   false/true/false across lifecycle
   setAuthorizedSlasher    4   success, event, OwnableUnauthorizedAccount, new slasher works
