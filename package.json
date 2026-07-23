@@ -20,6 +20,7 @@
     "agent:list":         "node scripts/cli/list-agents.js",
     "bond:post":          "node scripts/cli/post-bond.js",
     "bond:slash":         "node scripts/cli/slash.js",
+    "bond:settle":        "node scripts/cli/settle.js",
     "gating:check":       "node scripts/cli/gating-check.js",
     "node":               "hardhat node"
   },

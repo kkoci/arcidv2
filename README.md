@@ -199,6 +199,36 @@ on-chain verbatim in the `AgentSlashed` event, same as the consumer agent's LLM 
   5.00 USDC transferred to consumer 0xF3a9...12c
 ```
 
+### Record a settlement (demo / testing)
+
+```bash
+npm run bond:settle -- \
+  --key <slasher-private-key> \
+  --agent <agent-address> \
+  --consumer <consumer-address> \
+  [--amount 0.001] \
+  [--verdict-hash 0x...]
+```
+
+The "no breach" counterpart to `bond:slash`. Caller must be the
+`authorizedSlasher`. Does not move funds — the Circle Gateway payment already
+happened (via the consumer agent's `settlement.js`, or manually); this only
+writes the on-chain `PaymentSettled` audit record. Reverts (`AlreadySlashed`)
+if the agent's bond was already slashed, so a payment can never be logged
+against an agent that was already paid out via slash.
+
+```
+→ Recording settlement for agent 0x71bE...abc on arcTestnet
+  ArcIDBond:    0x...
+  Caller:       0x...
+  Consumer:     0xF3a9...12c
+  Amount:       0.001000 USDC
+  VerdictHash:  0x9d5be3aa...
+
+✓ recordSettlement() mined → 0x1304d8e4...
+  0.001000 USDC settlement logged for agent 0x71bE...abc
+```
+
 ### Proof-of-gating check
 
 ```bash

@@ -6,7 +6,7 @@
 
 ---
 
-## Video Script — 3 minutes, 7 beats
+## Video Script — 3 minutes, 8 beats
 
 Record on Loom, YouTube, or Vimeo. Use screen + terminal. No slides — show the running system.
 
@@ -74,7 +74,26 @@ Show the `✗ BREACH` verdict and the LLM rationale text. The rationale should s
 
 ---
 
-### Beat 4 — Traction (1:15–1:50, 35 seconds)
+### Beat 3.5 — Closing the loop: real settlement (1:15–1:30, 15 seconds)
+
+**Screen:** Consumer terminal — the same healthy cycle from Beat 3
+
+> "The story doesn't end at 'no slash.' On a clean verdict, the consumer agent
+> settles a real payment through Circle Gateway — the same nanopayment rail
+> proven in the oracle's x402 route — and logs it on-chain."
+
+Show the `✓ SETTLED` line and the `PaymentSettled` event's tx hash.
+
+> "Breach and clean delivery are mutually exclusive by construction — the bond
+> contract itself won't let a settlement be logged against an agent that's
+> already been slashed. Both outcomes write to the same on-chain event log,
+> so there's one attributable record either way."
+
+_(CLI equivalent for a standalone demo: `npm run bond:settle -- --key ... --agent ... --consumer ...`)_
+
+---
+
+### Beat 4 — Traction (1:30–2:05, 35 seconds)
 
 **Screen:** Dashboard traction strip + Stats panel
 
@@ -89,7 +108,7 @@ Scroll down to the verdict feed to show real verdict history.
 
 ---
 
-### Beat 5 — Circle differentiator: USYC (1:50–2:10, 20 seconds)
+### Beat 5 — Circle differentiator: USYC (2:05–2:25, 20 seconds)
 
 **Screen:** Dashboard — USYCBondCard section
 
@@ -115,7 +134,7 @@ npm run deploy:usyc:local
 
 ---
 
-### Beat 6 — Live slash on-chain (2:10–2:30, 20 seconds)
+### Beat 6 — Live slash on-chain (2:25–2:45, 20 seconds)
 
 **Screen:** Dashboard — AgentCard → "Trigger Fault" → "stale"
 
@@ -130,7 +149,7 @@ If DEV_MODE=true: > "[Dev mode — on testnet this executes a real on-chain tran
 
 ---
 
-### Beat 7 — Close (2:30–2:40, 10 seconds)
+### Beat 7 — Close (2:45–2:55, 10 seconds)
 
 **Screen:** Dashboard full view
 
@@ -263,6 +282,7 @@ Consumer cycles logged:      [N] JSONL lines in consumer/logs/
 - [ ] Consumer runs: `cd consumer && npm start` → healthy cycles visible
 - [ ] Dashboard loads: `cd frontend && npm run dev` → http://localhost:5174
 - [ ] Fault injection works: Dashboard → "stale" → consumer detects breach within ~12s
+- [ ] Settlement works: healthy cycle → consumer settles on-chain (`✓ SETTLED`); standalone check via `npm run bond:settle`
 - [ ] GitHub repo is public
 - [ ] Video recorded and uploaded
 - [ ] Form submitted at https://forms.gle/SMqLaw2pMGDe58LFA
