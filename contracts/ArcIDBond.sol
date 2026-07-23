@@ -59,6 +59,12 @@ contract ArcIDBond is Ownable, ReentrancyGuard {
 
     mapping(address => BondInfo) public bonds;
 
+    /// @dev Dedupes recordSettlement() calls — the off-chain consumer agent
+    ///      already has its own idempotency ledger, but a duplicate on-chain
+    ///      log entry for the same verdict would corrupt the audit trail
+    ///      just as a double-slash would, so it's guarded the same way.
+    mapping(bytes32 => bool) public settledVerdicts;
+
     // -------------------------------------------------------------------------
     // events — consumed by the frontend live counters and the consumer agent log
     // -------------------------------------------------------------------------
@@ -78,6 +84,17 @@ contract ArcIDBond is Ownable, ReentrancyGuard {
         string  reason      // LLM-authored rationale from the consumer agent
     );
 
+    /// @dev Emitted on recordSettlement(). The "no breach" counterpart to
+    ///      AgentSlashed — same event-log auditability for the clean path.
+    ///      The settlement itself (Circle Gateway payment) already happened
+    ///      off-chain; this call only logs it against the bonded agent.
+    event PaymentSettled(
+        address indexed agent,
+        address indexed consumer,
+        uint256 amount,
+        bytes32 verdictHash  // ties back to the off-chain adjudication record
+    );
+
     /// @dev Emitted on voluntarywithdrawal.
     event BondWithdrawn(address indexed agent, uint256 amount);
 
@@ -93,6 +110,7 @@ contract ArcIDBond is Ownable, ReentrancyGuard {
     error NoBondFound();
     error AlreadySlashed();
     error NotAuthorizedSlasher();
+    error AlreadySettled();
 
     // -------------------------------------------------------------------------
     // constructor
@@ -173,6 +191,47 @@ contract ArcIDBond is Ownable, ReentrancyGuard {
         collateralToken.transfer(consumer, amount);
 
         emit AgentSlashed(agent, consumer, amount, reason);
+    }
+
+    // -------------------------------------------------------------------------
+    // core: settlement logging (no-breach path)
+    // -------------------------------------------------------------------------
+
+    /// @notice Record a successful off-chain settlement (Circle Gateway
+    ///         payment) against a bonded agent's clean adjudication verdict.
+    ///
+    ///         This does NOT move funds — settlement already happened via
+    ///         Circle Gateway before this call. Its only job is to give the
+    ///         "no breach" outcome the same on-chain event-log auditability
+    ///         that slash() already gives the breach outcome.
+    ///
+    ///         Requiring an active, unslashed bond means a payment can never
+    ///         be logged for an agent whose bond was already slashed — the
+    ///         two outcomes are mutually exclusive on-chain, not just by
+    ///         convention in the consumer agent's off-chain logic.
+    ///
+    /// @param agent       The bonded provider agent that was paid.
+    /// @param consumer    The consumer wallet that made the payment.
+    /// @param amount      Amount settled, in the payment token's smallest unit.
+    /// @param verdictHash Hash of the adjudicator's verdict outcome (off-chain
+    ///                     identifier); prevents the same verdict being
+    ///                     recorded on-chain twice.
+    function recordSettlement(
+        address agent,
+        address consumer,
+        uint256 amount,
+        bytes32 verdictHash
+    ) external nonReentrant {
+        if (msg.sender != authorizedSlasher) revert NotAuthorizedSlasher();
+
+        BondInfo storage b = bonds[agent];
+        if (b.postedAt == 0) revert NoBondFound();
+        if (b.slashed)       revert AlreadySlashed();
+
+        if (settledVerdicts[verdictHash]) revert AlreadySettled();
+        settledVerdicts[verdictHash] = true;
+
+        emit PaymentSettled(agent, consumer, amount, verdictHash);
     }
 
     // -------------------------------------------------------------------------

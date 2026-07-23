@@ -216,9 +216,10 @@ async function runCycle(cycleNumber) {
     checks:          verdict.checks,
     slash_tx:        slashResult?.txHash ?? null,
     slash_simulated: slashResult?.simulated ?? false,
-    settlement_tx:        settlementResult?.txHash ?? null,
-    settlement_simulated: settlementResult?.simulated ?? false,
-    settlement_error:     settlementResult?.error ?? null,
+    settlement_tx:         settlementResult?.txHash ?? null,
+    settlement_onchain_tx: settlementResult?.onChainTx ?? null,
+    settlement_simulated:  settlementResult?.simulated ?? false,
+    settlement_error:      settlementResult?.error ?? null,
     duration_ms:     duration,
   };
   logCycle(record);

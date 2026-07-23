@@ -176,6 +176,69 @@ describe("ArcIDBond", function () {
   });
 
   // ---------------------------------------------------------------------------
+  // recordSettlement — the "no breach" counterpart to slash()
+  // ---------------------------------------------------------------------------
+
+  describe("recordSettlement", function () {
+    const VERDICT_HASH = ethers.keccak256(ethers.toUtf8Bytes("verdict:ok"));
+
+    beforeEach(async function () {
+      await bond.connect(verifiedAgent).postBond(FIVE_USDC);
+    });
+
+    it("emits PaymentSettled with the correct args", async function () {
+      await expect(
+        bond.recordSettlement(verifiedAgent.address, consumer.address, ONE_USDC, VERDICT_HASH)
+      )
+        .to.emit(bond, "PaymentSettled")
+        .withArgs(verifiedAgent.address, consumer.address, ONE_USDC, VERDICT_HASH);
+    });
+
+    it("does not move any funds", async function () {
+      const before = await usdc.balanceOf(await bond.getAddress());
+      await bond.recordSettlement(verifiedAgent.address, consumer.address, ONE_USDC, VERDICT_HASH);
+      const after = await usdc.balanceOf(await bond.getAddress());
+      expect(after).to.equal(before);
+    });
+
+    it("reverts if caller is not the authorized slasher", async function () {
+      await expect(
+        bond.connect(otherSlasher).recordSettlement(verifiedAgent.address, consumer.address, ONE_USDC, VERDICT_HASH)
+      ).to.be.revertedWithCustomError(bond, "NotAuthorizedSlasher");
+    });
+
+    it("reverts with NoBondFound for an agent with no bond", async function () {
+      await expect(
+        bond.recordSettlement(unverifiedAgent.address, consumer.address, ONE_USDC, VERDICT_HASH)
+      ).to.be.revertedWithCustomError(bond, "NoBondFound");
+    });
+
+    it("reverts with AlreadySlashed if the agent's bond was already slashed", async function () {
+      await bond.slash(verifiedAgent.address, consumer.address, "breach");
+      await expect(
+        bond.recordSettlement(verifiedAgent.address, consumer.address, ONE_USDC, VERDICT_HASH)
+      ).to.be.revertedWithCustomError(bond, "AlreadySlashed");
+    });
+
+    it("reverts with AlreadySettled on a duplicate verdictHash", async function () {
+      await bond.recordSettlement(verifiedAgent.address, consumer.address, ONE_USDC, VERDICT_HASH);
+      await expect(
+        bond.recordSettlement(verifiedAgent.address, consumer.address, ONE_USDC, VERDICT_HASH)
+      ).to.be.revertedWithCustomError(bond, "AlreadySettled");
+    });
+
+    it("cannot be called for an agent after slash() has consumed the same verdictHash's bond", async function () {
+      // Mutual exclusivity check: once slashed, no settlement can be logged
+      // for that agent's bond, regardless of verdictHash.
+      await bond.slash(verifiedAgent.address, consumer.address, "breach");
+      const otherHash = ethers.keccak256(ethers.toUtf8Bytes("verdict:ok:2"));
+      await expect(
+        bond.recordSettlement(verifiedAgent.address, consumer.address, ONE_USDC, otherHash)
+      ).to.be.revertedWithCustomError(bond, "AlreadySlashed");
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // withdrawBond
   // ---------------------------------------------------------------------------
 
