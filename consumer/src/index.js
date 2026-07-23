@@ -24,6 +24,7 @@ const { fetchOraclePrice }      = require("./oracle");
 const { verifyOracleSignature } = require("./verifier");
 const { adjudicate }            = require("./adjudicator");
 const { executeSlash }          = require("./slasher");
+const { executeSettlement }     = require("./settlement");
 
 // ---------------------------------------------------------------------------
 // CLI args
@@ -160,8 +161,10 @@ async function runCycle(cycleNumber) {
 
   printVerdict(verdict);
 
-  // ── 4. Slash on breach ───────────────────────────────────────────────────
+  // ── 4. Act on verdict: slash on breach, settle payment on clean ──────────
   let slashResult = null;
+  let settlementResult = null;
+
   if (verdict.verdict === "breach" && verdict.should_slash) {
     console.log(`\n  ${RED}${BOLD}→ Slashing oracle...${RESET}`);
     try {
@@ -177,6 +180,22 @@ async function runCycle(cycleNumber) {
       }
     } catch (err) {
       console.log(`  ${color("Slash failed:", RED)} ${err.message}`);
+    }
+  } else if (verdict.verdict === "ok") {
+    console.log(`\n  ${GREEN}${BOLD}→ Settling payment (clean verdict)...${RESET}`);
+    try {
+      settlementResult = await executeSettlement({ oracleResponse, verdict });
+      if (settlementResult.simulated) {
+        console.log(`  ${YELLOW}[DEV] Settlement simulated (set DEV_MODE=false for real Gateway payment)${RESET}`);
+      } else if (settlementResult.txHash) {
+        console.log(`  ${GREEN}${BOLD}✓ SETTLED — tx: ${settlementResult.txHash}${RESET}`);
+      } else if (settlementResult.error) {
+        console.log(`  ${color("Settlement failed:", RED)} ${settlementResult.error}`);
+      } else if (settlementResult.skipped) {
+        console.log(`  ${DIM}Settlement skipped: ${settlementResult.skipped}${RESET}`);
+      }
+    } catch (err) {
+      console.log(`  ${color("Settlement failed:", RED)} ${err.message}`);
     }
   }
 
@@ -197,6 +216,9 @@ async function runCycle(cycleNumber) {
     checks:          verdict.checks,
     slash_tx:        slashResult?.txHash ?? null,
     slash_simulated: slashResult?.simulated ?? false,
+    settlement_tx:        settlementResult?.txHash ?? null,
+    settlement_simulated: settlementResult?.simulated ?? false,
+    settlement_error:     settlementResult?.error ?? null,
     duration_ms:     duration,
   };
   logCycle(record);
