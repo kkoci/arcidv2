@@ -26,6 +26,14 @@ module.exports = {
   // behavior (CONSUMER_PRIVATE_KEY calls ArcIDBond directly as authorizedSlasher).
   SESSION_GUARD_ADDRESS: process.env.SESSION_GUARD_ADDRESS || "",
 
+  // Deterministic payment gate (Phase 7, post-submission — see CHANGELOG.md).
+  // PRICE_USDC is the agreed per-call oracle price (must match oracle/.env's
+  // own PRICE_USDC — paymentGate.js rejects any Gateway payment that doesn't
+  // equal this exactly). MAX_SETTLEMENT_USDC is a hard per-call ceiling,
+  // independent of and in addition to any ConsumerSessionKeyGuard cap.
+  PRICE_USDC:          process.env.PRICE_USDC          || "0.001",
+  MAX_SETTLEMENT_USDC: process.env.MAX_SETTLEMENT_USDC || "0.01",
+
   // LLM
   ANTHROPIC_API_KEY: required("ANTHROPIC_API_KEY"),
   MODEL:             process.env.MODEL || "claude-sonnet-4-6",

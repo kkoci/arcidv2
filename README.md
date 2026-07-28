@@ -8,11 +8,12 @@ Addresses Lepton's **Prior Art #8** (bonded agent reputation) and **RFB 3** (age
 
 > **Transparency note:** the submission form locked 2026-07-06. Payment
 > execution on a clean verdict (real Circle Gateway settlement +
-> `ArcIDBond.recordSettlement()`) and session-key wallet hardening for the
-> consumer agent were both added afterward, during the (extended, ongoing)
-> event window — judges track commit activity through the end of the event,
-> and no winner date had been announced at the time. See
-> [CHANGELOG.md](CHANGELOG.md) for the full breakdown, commit-by-commit.
+> `ArcIDBond.recordSettlement()`), session-key wallet hardening, and a
+> deterministic anti-injection payment gate for the consumer agent were all
+> added afterward, during the (extended, ongoing) event window — judges
+> track commit activity through the end of the event, and no winner date had
+> been announced at the time. See [CHANGELOG.md](CHANGELOG.md) for the full
+> breakdown, commit-by-commit.
 
 ---
 
@@ -367,6 +368,14 @@ should live in the consumer agent's post-verdict handler, not inside the oracle,
 and it inherits trust from the already-attested identity and the on-chain
 bond/slash contract, not from any new TEE involvement of its own.
 
+**Corollary (Phase 7, post-submission — see [CHANGELOG.md](CHANGELOG.md)):**
+because the LLM verdict has no TEE involvement, and reasons over service
+response content that's untrusted by the same logic as any other network
+input, `consumer/src/paymentGate.js` inserts a deterministic, non-LLM check
+directly in front of both the real Gateway payment and the on-chain audit
+write — independently re-deriving payee/amount from config, never from
+`verdict.*` or the oracle response, and refusing the call on any mismatch.
+
 ---
 
 ## Phase Status
@@ -382,6 +391,7 @@ bond/slash contract, not from any new TEE involvement of its own.
 | 7 | `ArcIDRegistryV2.sol` + `DCAPVerifier.sol` — native on-chain registry with real DCAP verification; `deploy:standalone` registers + bonds in one command; 10 new tests | ✅ Complete |
 | Post-submission | Payment execution — real Circle Gateway settlement + `ArcIDBond.recordSettlement()` audit trail on a clean verdict; 7 new tests | ✅ Complete → [CHANGELOG.md](CHANGELOG.md) |
 | Post-submission | `ConsumerSessionKeyGuard.sol` — session-key wallet hardening for the consumer agent's slash/settlement authority; 22 new tests | ✅ Complete → [CHANGELOG.md](CHANGELOG.md) |
+| Post-submission | `consumer/src/paymentGate.js` — deterministic, non-LLM payee/amount/cap gate in front of Gateway settlement and the on-chain audit write | ✅ Complete → [CHANGELOG.md](CHANGELOG.md) |
 
 **Test suite:** 79 passing (`npm test`) — no external RPC, no `.env` required.
 

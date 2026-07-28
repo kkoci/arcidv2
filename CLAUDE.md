@@ -230,6 +230,13 @@ consumer/src/slasher.js                 Routes through the guard when SESSION_GU
 consumer/src/settlement.js              Same — guardedRecordSettlement() instead of recordSettlement() directly
 ```
 
+Deterministic payment gate files (post-submission, Phase 7 — see CHANGELOG.md):
+```
+consumer/src/paymentGate.js             gateGatewayPayment() + gateOnChainRecord() — non-LLM payee/amount/cap checks
+consumer/src/settlement.js              Wires the gate as GatewayClient's onBeforePaymentCreation hook + a pre-flight
+                                         check before recordSettlement()/guardedRecordSettlement()
+```
+
 ---
 
 ## ArcIDBond Contract Events

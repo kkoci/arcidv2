@@ -26,6 +26,11 @@
  * is set, the on-chain audit call routes through
  * ConsumerSessionKeyGuard.guardedRecordSettlement() instead of ArcIDBond
  * directly — same amount-cap/expiry/fixed-payout protections slasher.js gets.
+ *
+ * Phase 7 (post-submission — see CHANGELOG.md): every payee/amount pair that
+ * reaches a real fund movement or on-chain write passes through
+ * paymentGate.js first — a deterministic, non-LLM check independent of
+ * anything the verdict or the oracle response claims.
  */
 
 const fs     = require("fs");
@@ -33,6 +38,7 @@ const path   = require("path");
 const crypto = require("crypto");
 const { ethers } = require("ethers");
 const config = require("./config");
+const { gateGatewayPayment, gateOnChainRecord, PaymentGateError } = require("./paymentGate");
 
 const LEDGER_PATH      = path.join(path.resolve(config.LOG_DIR), "settlement_ledger.json");
 const FAILURE_LOG_PATH = path.join(path.resolve(config.LOG_DIR), "settlement_failures.jsonl");
@@ -148,20 +154,25 @@ async function executeSettlement({ oracleResponse, verdict }) {
   let amount, transaction;
   try {
     const { GatewayClient } = require("@circle-fin/x402-batching/client");
-    const client = new GatewayClient({ chain: "arcTestnet", privateKey: config.CONSUMER_PRIVATE_KEY });
+    const client = new GatewayClient({ chain: "arcTestnet", privateKey: config.CONSUMER_PRIVATE_KEY })
+      .onBeforePaymentCreation(gateGatewayPayment);
 
     const priceUrl = `${config.ORACLE_URL}/api/price`;
     ({ amount, transaction } = await client.pay(priceUrl));
   } catch (err) {
-    logFailure({ serviceId, verdictHash: hash, stage: "gateway-payment", error: err.message });
+    const stage = err instanceof PaymentGateError ? "payment-gate" : "gateway-payment";
+    logFailure({ serviceId, verdictHash: hash, stage, error: err.message });
     return { settled: false, error: err.message };
   }
 
   // Payment already moved funds — a failure here is an audit-log gap, not a
   // failed settlement, so it's logged distinctly rather than flipping
-  // `settled` back to false.
+  // `settled` back to false. A payment-gate rejection at this step means the
+  // amount actually paid diverged from the agreed price somewhere between
+  // payment and this call — refuse the on-chain write and flag it loudly.
   let onChainTx = null;
   try {
+    gateOnChainRecord({ agent: config.ORACLE_WALLET_ADDRESS, amount: amount ?? 0n });
     onChainTx = await recordSettlementOnChain({
       agent:    config.ORACLE_WALLET_ADDRESS,
       consumer: config.CONSUMER_WALLET_ADDRESS,
@@ -169,7 +180,8 @@ async function executeSettlement({ oracleResponse, verdict }) {
       hash,
     });
   } catch (err) {
-    logFailure({ serviceId, verdictHash: hash, stage: "on-chain-audit", gatewayTx: transaction, error: err.message });
+    const stage = err instanceof PaymentGateError ? "payment-gate" : "on-chain-audit";
+    logFailure({ serviceId, verdictHash: hash, stage, gatewayTx: transaction, error: err.message });
   }
 
   const result = {
