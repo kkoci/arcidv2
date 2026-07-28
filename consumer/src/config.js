@@ -34,6 +34,13 @@ module.exports = {
   PRICE_USDC:          process.env.PRICE_USDC          || "0.001",
   MAX_SETTLEMENT_USDC: process.env.MAX_SETTLEMENT_USDC || "0.01",
 
+  // Spend-velocity circuit breaker (Phase 8, post-submission — see CHANGELOG.md).
+  // Rolling per-minute/per-hour spend caps computed from the settlement
+  // ledger. Crossing either halts further settlement calls until a manual
+  // `npm run breaker:resume` (in consumer/) — no auto-recovery.
+  MAX_SPEND_PER_MINUTE_USDC: process.env.MAX_SPEND_PER_MINUTE_USDC || "0.05",
+  MAX_SPEND_PER_HOUR_USDC:   process.env.MAX_SPEND_PER_HOUR_USDC   || "1.0",
+
   // LLM
   ANTHROPIC_API_KEY: required("ANTHROPIC_API_KEY"),
   MODEL:             process.env.MODEL || "claude-sonnet-4-6",

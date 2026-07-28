@@ -8,12 +8,12 @@ Addresses Lepton's **Prior Art #8** (bonded agent reputation) and **RFB 3** (age
 
 > **Transparency note:** the submission form locked 2026-07-06. Payment
 > execution on a clean verdict (real Circle Gateway settlement +
-> `ArcIDBond.recordSettlement()`), session-key wallet hardening, and a
-> deterministic anti-injection payment gate for the consumer agent were all
-> added afterward, during the (extended, ongoing) event window — judges
-> track commit activity through the end of the event, and no winner date had
-> been announced at the time. See [CHANGELOG.md](CHANGELOG.md) for the full
-> breakdown, commit-by-commit.
+> `ArcIDBond.recordSettlement()`), session-key wallet hardening, a
+> deterministic anti-injection payment gate, and a spend-velocity circuit
+> breaker for the consumer agent were all added afterward, during the
+> (extended, ongoing) event window — judges track commit activity through
+> the end of the event, and no winner date had been announced at the time.
+> See [CHANGELOG.md](CHANGELOG.md) for the full breakdown, commit-by-commit.
 
 ---
 
@@ -267,6 +267,19 @@ payout address the key cannot redirect, a single target contract
 consumer agent's `.env`, plus `SESSION_GUARD_ADDRESS` from
 `deployments/<network>_session_guard.json`. The owner key stays offline.
 
+### Check / resume the settlement circuit breaker (post-submission — see CHANGELOG.md)
+
+```bash
+# From consumer/
+npm run breaker:status
+npm run breaker:resume -- --reason "confirmed legitimate traffic spike"
+```
+
+Reports rolling 1-minute/1-hour settlement spend against `MAX_SPEND_PER_MINUTE_USDC`
+/ `MAX_SPEND_PER_HOUR_USDC`, and whether the breaker is currently tripped.
+There is no automatic recovery — `breaker:resume` is the only way to clear a
+trip, and it's a manual, human decision by design.
+
 ### Proof-of-gating check
 
 ```bash
@@ -376,6 +389,16 @@ directly in front of both the real Gateway payment and the on-chain audit
 write — independently re-deriving payee/amount from config, never from
 `verdict.*` or the oracle response, and refusing the call on any mismatch.
 
+**Corollary 2 (Phase 8, post-submission — see [CHANGELOG.md](CHANGELOG.md)):**
+per-call caps (Phase 6/7) don't catch a consumer stuck in a retry or
+re-adjudication loop firing many small, individually-legitimate settlements
+— each passes its own cap check, but the total drains the budget.
+`checkCircuitBreaker()` in `settlement.js` sums the settlement ledger's spend
+over rolling 1-minute/1-hour windows before every call; crossing either caps
+it, persists a tripped flag in the ledger, and halts every further
+settlement until a human runs `npm run breaker:resume` (in `consumer/`) —
+there is no automatic recovery path.
+
 ---
 
 ## Phase Status
@@ -392,6 +415,7 @@ write — independently re-deriving payee/amount from config, never from
 | Post-submission | Payment execution — real Circle Gateway settlement + `ArcIDBond.recordSettlement()` audit trail on a clean verdict; 7 new tests | ✅ Complete → [CHANGELOG.md](CHANGELOG.md) |
 | Post-submission | `ConsumerSessionKeyGuard.sol` — session-key wallet hardening for the consumer agent's slash/settlement authority; 22 new tests | ✅ Complete → [CHANGELOG.md](CHANGELOG.md) |
 | Post-submission | `consumer/src/paymentGate.js` — deterministic, non-LLM payee/amount/cap gate in front of Gateway settlement and the on-chain audit write | ✅ Complete → [CHANGELOG.md](CHANGELOG.md) |
+| Post-submission | Spend-velocity circuit breaker — rolling 1m/1h settlement spend caps, manual-only resume | ✅ Complete → [CHANGELOG.md](CHANGELOG.md) |
 
 **Test suite:** 79 passing (`npm test`) — no external RPC, no `.env` required.
 

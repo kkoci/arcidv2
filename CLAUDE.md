@@ -237,6 +237,13 @@ consumer/src/settlement.js              Wires the gate as GatewayClient's onBefo
                                          check before recordSettlement()/guardedRecordSettlement()
 ```
 
+Spend-velocity circuit breaker files (post-submission, Phase 8 — see CHANGELOG.md):
+```
+consumer/src/settlement.js              checkCircuitBreaker() — rolling 1m/1h spend vs MAX_SPEND_PER_*_USDC,
+                                         tripped state persisted in settlement_ledger.json under "_circuitBreaker"
+consumer/scripts/breaker.js             npm run breaker:status / breaker:resume — manual-only resume, no auto-recovery
+```
+
 ---
 
 ## ArcIDBond Contract Events

@@ -185,7 +185,9 @@ async function runCycle(cycleNumber) {
     console.log(`\n  ${GREEN}${BOLD}→ Settling payment (clean verdict)...${RESET}`);
     try {
       settlementResult = await executeSettlement({ oracleResponse, verdict });
-      if (settlementResult.simulated) {
+      if (settlementResult.circuitBreakerTripped) {
+        console.log(`  ${RED}${BOLD}🛑 CIRCUIT BREAKER — ${settlementResult.reason}${RESET}`);
+      } else if (settlementResult.simulated) {
         console.log(`  ${YELLOW}[DEV] Settlement simulated (set DEV_MODE=false for real Gateway payment)${RESET}`);
       } else if (settlementResult.txHash) {
         console.log(`  ${GREEN}${BOLD}✓ SETTLED — tx: ${settlementResult.txHash}${RESET}`);
@@ -220,6 +222,7 @@ async function runCycle(cycleNumber) {
     settlement_onchain_tx: settlementResult?.onChainTx ?? null,
     settlement_simulated:  settlementResult?.simulated ?? false,
     settlement_error:      settlementResult?.error ?? null,
+    circuit_breaker_tripped: settlementResult?.circuitBreakerTripped ?? false,
     duration_ms:     duration,
   };
   logCycle(record);

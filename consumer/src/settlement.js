@@ -31,6 +31,16 @@
  * reaches a real fund movement or on-chain write passes through
  * paymentGate.js first — a deterministic, non-LLM check independent of
  * anything the verdict or the oracle response claims.
+ *
+ * Phase 8 (post-submission — see CHANGELOG.md): per-call caps (Phase 6/7)
+ * don't catch a consumer stuck in a retry/re-adjudication loop firing many
+ * small, individually-legitimate payments — each one passes its own cap
+ * check, but the total drains the budget. Before any settlement (real or
+ * simulated), checkCircuitBreaker() sums this same ledger's spend over
+ * rolling 1-minute/1-hour windows; if adding this call would cross either
+ * threshold, it trips a persisted breaker flag in the ledger and refuses —
+ * every subsequent call stays refused until a manual
+ * `npm run breaker:resume` (in consumer/). No auto-recovery.
  */
 
 const fs     = require("fs");
@@ -38,10 +48,20 @@ const path   = require("path");
 const crypto = require("crypto");
 const { ethers } = require("ethers");
 const config = require("./config");
-const { gateGatewayPayment, gateOnChainRecord, PaymentGateError } = require("./paymentGate");
+const { gateGatewayPayment, gateOnChainRecord, PaymentGateError, PRICE_ATOMIC } = require("./paymentGate");
 
 const LEDGER_PATH      = path.join(path.resolve(config.LOG_DIR), "settlement_ledger.json");
 const FAILURE_LOG_PATH = path.join(path.resolve(config.LOG_DIR), "settlement_failures.jsonl");
+const ALERT_LOG_PATH   = path.join(path.resolve(config.LOG_DIR), "circuit_breaker_alerts.jsonl");
+
+// Reserved ledger key for circuit-breaker state — namespaced with a leading
+// underscore so it can never collide with a `serviceId:verdictHash` dedupe key.
+const BREAKER_KEY = "_circuitBreaker";
+const ONE_MINUTE_MS = 60_000;
+const ONE_HOUR_MS   = 60 * ONE_MINUTE_MS;
+
+const MAX_PER_MINUTE_ATOMIC = BigInt(Math.round(parseFloat(config.MAX_SPEND_PER_MINUTE_USDC) * 1e6));
+const MAX_PER_HOUR_ATOMIC   = BigInt(Math.round(parseFloat(config.MAX_SPEND_PER_HOUR_USDC) * 1e6));
 
 const BOND_ABI = [
   "function recordSettlement(address agent, address consumer, uint256 amount, bytes32 verdictHash) external",
@@ -70,6 +90,90 @@ function loadLedger() {
 function saveLedger(ledger) {
   fs.mkdirSync(path.dirname(LEDGER_PATH), { recursive: true });
   fs.writeFileSync(LEDGER_PATH, JSON.stringify(ledger, null, 2));
+}
+
+function logAlert(record) {
+  fs.mkdirSync(path.dirname(ALERT_LOG_PATH), { recursive: true });
+  fs.appendFileSync(ALERT_LOG_PATH, JSON.stringify({ at: new Date().toISOString(), ...record }) + "\n");
+}
+
+// Sums settled amounts (real or simulated — both represent real spend
+// intent) recorded in `ledger` within the last `windowMs`. Skips the
+// reserved breaker-state entry.
+function rollingSpend(ledger, windowMs, now = Date.now()) {
+  let total = 0n;
+  for (const [key, entry] of Object.entries(ledger)) {
+    if (key === BREAKER_KEY) continue;
+    if (!entry || entry.amount == null) continue;
+    const at = Date.parse(entry.at);
+    if (Number.isNaN(at) || now - at > windowMs) continue;
+    total += BigInt(entry.amount);
+  }
+  return total;
+}
+
+// Pre-check: would adding `incomingAmount` push rolling spend over either
+// window's cap? If the breaker is already tripped, refuse immediately
+// without recomputing. Otherwise trips (and persists) on first crossing.
+function checkCircuitBreaker(ledger, incomingAmount) {
+  const existing = ledger[BREAKER_KEY];
+  if (existing && existing.tripped) {
+    return { tripped: true, reason: existing.reason, trippedAt: existing.trippedAt, alreadyTripped: true };
+  }
+
+  const now = Date.now();
+  const projectedPerMinute = rollingSpend(ledger, ONE_MINUTE_MS, now) + incomingAmount;
+  const projectedPerHour   = rollingSpend(ledger, ONE_HOUR_MS,   now) + incomingAmount;
+
+  let reason = null;
+  if (projectedPerMinute > MAX_PER_MINUTE_ATOMIC) {
+    reason = `projected 1-minute spend ${projectedPerMinute} exceeds cap ${MAX_PER_MINUTE_ATOMIC} (${config.MAX_SPEND_PER_MINUTE_USDC} USDC)`;
+  } else if (projectedPerHour > MAX_PER_HOUR_ATOMIC) {
+    reason = `projected 1-hour spend ${projectedPerHour} exceeds cap ${MAX_PER_HOUR_ATOMIC} (${config.MAX_SPEND_PER_HOUR_USDC} USDC)`;
+  }
+
+  if (!reason) return { tripped: false };
+
+  const trippedAt = new Date().toISOString();
+  ledger[BREAKER_KEY] = { tripped: true, reason, trippedAt };
+  saveLedger(ledger);
+  logAlert({ event: "circuit-breaker-tripped", reason, trippedAt });
+  return { tripped: true, reason, trippedAt };
+}
+
+/**
+ * Current breaker status + rolling spend, without side effects.
+ */
+function getCircuitBreakerStatus() {
+  const ledger = loadLedger();
+  const breaker = ledger[BREAKER_KEY] || { tripped: false };
+  const now = Date.now();
+  return {
+    tripped:          !!breaker.tripped,
+    detail:           breaker,
+    spendLastMinute:  rollingSpend(ledger, ONE_MINUTE_MS, now).toString(),
+    spendLastHour:    rollingSpend(ledger, ONE_HOUR_MS, now).toString(),
+    capPerMinute:     MAX_PER_MINUTE_ATOMIC.toString(),
+    capPerHour:       MAX_PER_HOUR_ATOMIC.toString(),
+  };
+}
+
+/**
+ * Manually clear a tripped breaker. There is no automatic path to this —
+ * by design, per Phase 8: a human has to look and decide it's safe to
+ * continue.
+ */
+function resumeCircuitBreaker(reason = "manual resume") {
+  const ledger = loadLedger();
+  const prior = ledger[BREAKER_KEY];
+  if (!prior || !prior.tripped) {
+    return { resumed: false, message: "circuit breaker was not tripped" };
+  }
+  const resumedAt = new Date().toISOString();
+  ledger[BREAKER_KEY] = { tripped: false, resumedAt, resumeReason: reason, priorTrip: prior };
+  saveLedger(ledger);
+  logAlert({ event: "circuit-breaker-resumed", resumedAt, resumeReason: reason, priorTrip: prior });
+  return { resumed: true, priorTrip: prior };
 }
 
 // Identifies the exact service interaction being paid for — the oracle's own
@@ -126,7 +230,7 @@ async function recordSettlementOnChain({ agent, consumer, amount, hash }) {
  * @param {object} params
  * @param {object} params.oracleResponse  The raw oracle response this verdict was adjudicated over
  * @param {object} params.verdict         The adjudicator's verdict object
- * @returns {Promise<{settled:boolean, simulated?:boolean, txHash?:string|null, onChainTx?:string|null, amount?:string|null, skipped?:string, error?:string}>}
+ * @returns {Promise<{settled:boolean, simulated?:boolean, txHash?:string|null, onChainTx?:string|null, amount?:string|null, skipped?:string, error?:string, circuitBreakerTripped?:boolean, reason?:string}>}
  */
 async function executeSettlement({ oracleResponse, verdict }) {
   if (verdict.verdict !== "ok") {
@@ -142,10 +246,20 @@ async function executeSettlement({ oracleResponse, verdict }) {
     return { settled: false, skipped: "already settled for this service interaction", ...ledger[dedupeKey] };
   }
 
+  const breakerCheck = checkCircuitBreaker(ledger, PRICE_ATOMIC);
+  if (breakerCheck.tripped) {
+    console.error(`\n  🛑 CIRCUIT BREAKER TRIPPED — settlement halted.`);
+    console.error(`     ${breakerCheck.reason || "(previously tripped)"}`);
+    console.error(`     Resume manually: npm run breaker:resume (in consumer/)\n`);
+    return { settled: false, circuitBreakerTripped: true, reason: breakerCheck.reason ?? "circuit breaker is tripped" };
+  }
+
   if (config.DEV_MODE) {
     console.log(`  [settlement] DEV_MODE — simulated settlement`);
     console.log(`  [settlement] service: ${serviceId.slice(0, 24)}...`);
-    const result = { settled: true, simulated: true, txHash: null, onChainTx: null, amount: null };
+    // Notional amount, not moved — lets the circuit breaker's rolling spend
+    // math be exercised (and demoed) without a funded testnet wallet.
+    const result = { settled: true, simulated: true, txHash: null, onChainTx: null, amount: PRICE_ATOMIC.toString() };
     ledger[dedupeKey] = { ...result, at: new Date().toISOString() };
     saveLedger(ledger);
     return result;
@@ -196,4 +310,4 @@ async function executeSettlement({ oracleResponse, verdict }) {
   return result;
 }
 
-module.exports = { executeSettlement };
+module.exports = { executeSettlement, getCircuitBreakerStatus, resumeCircuitBreaker };
