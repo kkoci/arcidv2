@@ -21,6 +21,11 @@
  * sending a tx (no RPC needed locally), mirroring slasher.js's dev-mode
  * pattern. In production: sends a real Gateway payment + on-chain audit tx
  * to Arc testnet.
+ *
+ * Phase 6 (post-submission — see CHANGELOG.md): when config.SESSION_GUARD_ADDRESS
+ * is set, the on-chain audit call routes through
+ * ConsumerSessionKeyGuard.guardedRecordSettlement() instead of ArcIDBond
+ * directly — same amount-cap/expiry/fixed-payout protections slasher.js gets.
  */
 
 const fs     = require("fs");
@@ -36,8 +41,16 @@ const BOND_ABI = [
   "function recordSettlement(address agent, address consumer, uint256 amount, bytes32 verdictHash) external",
 ];
 
+const GUARD_ABI = [
+  "function guardedRecordSettlement(address agent, uint256 amount, bytes32 verdictHash) external",
+];
+
 function getBondContract(signerOrProvider) {
   return new ethers.Contract(config.BOND_CONTRACT_ADDRESS, BOND_ABI, signerOrProvider);
+}
+
+function getGuardContract(signerOrProvider) {
+  return new ethers.Contract(config.SESSION_GUARD_ADDRESS, GUARD_ABI, signerOrProvider);
 }
 
 function loadLedger() {
@@ -84,8 +97,15 @@ function logFailure(record) {
 async function recordSettlementOnChain({ agent, consumer, amount, hash }) {
   const provider = new ethers.JsonRpcProvider(config.ARC_RPC_URL);
   const signer   = new ethers.Wallet(config.CONSUMER_PRIVATE_KEY, provider);
-  const bond     = getBondContract(signer);
 
+  if (config.SESSION_GUARD_ADDRESS) {
+    const guard   = getGuardContract(signer);
+    const tx      = await guard.guardedRecordSettlement(agent, amount, hash);
+    const receipt = await tx.wait();
+    return receipt.hash;
+  }
+
+  const bond    = getBondContract(signer);
   const tx      = await bond.recordSettlement(agent, consumer, amount, hash);
   const receipt = await tx.wait();
   return receipt.hash;

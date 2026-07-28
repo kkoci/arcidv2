@@ -28,6 +28,7 @@ function loadABI(relPath) {
 
 const ArcIDRegistryV2ABI = loadABI("ArcIDRegistryV2.sol/ArcIDRegistryV2.json");
 const ArcIDBondABI        = loadABI("ArcIDBond.sol/ArcIDBond.json");
+const ConsumerSessionKeyGuardABI = loadABI("ConsumerSessionKeyGuard.sol/ConsumerSessionKeyGuard.json");
 
 const ERC20_ABI = [
   "function approve(address spender, uint256 amount) returns (bool)",
@@ -75,6 +76,21 @@ function loadDeployment(network = "arcTestnet") {
   return JSON.parse(fs.readFileSync(p, "utf8"));
 }
 
+function loadSessionGuardDeployment(network = "arcTestnet") {
+  const p = path.join(
+    __dirname,
+    `../../deployments/${network}_session_guard.json`
+  );
+  if (!fs.existsSync(p)) {
+    console.error(`\nSession guard deployment not found: ${p}`);
+    console.error(
+      `Run \`npm run deploy:session-guard:arc\` (or \`:local\` for Hardhat) first.\n`
+    );
+    process.exit(1);
+  }
+  return JSON.parse(fs.readFileSync(p, "utf8"));
+}
+
 // ---------------------------------------------------------------------------
 // Provider
 // ---------------------------------------------------------------------------
@@ -110,6 +126,10 @@ function getContracts(addresses, providerOrSigner) {
       providerOrSigner
     ),
   };
+}
+
+function getGuardContract(guardAddress, providerOrSigner) {
+  return new ethers.Contract(guardAddress, ConsumerSessionKeyGuardABI, providerOrSigner);
 }
 
 // ---------------------------------------------------------------------------
@@ -188,8 +208,10 @@ function formatTimestamp(ts) {
 module.exports = {
   parseArgs,
   loadDeployment,
+  loadSessionGuardDeployment,
   getProvider,
   getContracts,
+  getGuardContract,
   buildAttestation,
   buildPrototypeQuote,
   signRawDigest,
@@ -197,5 +219,6 @@ module.exports = {
   formatTimestamp,
   ArcIDRegistryV2ABI,
   ArcIDBondABI,
+  ConsumerSessionKeyGuardABI,
   ERC20_ABI,
 };

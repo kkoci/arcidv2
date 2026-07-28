@@ -8,9 +8,10 @@ Addresses Lepton's **Prior Art #8** (bonded agent reputation) and **RFB 3** (age
 
 > **Transparency note:** the submission form locked 2026-07-06. Payment
 > execution on a clean verdict (real Circle Gateway settlement +
-> `ArcIDBond.recordSettlement()`) was added afterward, during the (extended,
-> ongoing) event window — judges track commit activity through the end of
-> the event, and no winner date had been announced at the time. See
+> `ArcIDBond.recordSettlement()`) and session-key wallet hardening for the
+> consumer agent were both added afterward, during the (extended, ongoing)
+> event window — judges track commit activity through the end of the event,
+> and no winner date had been announced at the time. See
 > [CHANGELOG.md](CHANGELOG.md) for the full breakdown, commit-by-commit.
 
 ---
@@ -236,6 +237,35 @@ against an agent that was already paid out via slash.
   0.001000 USDC settlement logged for agent 0x71bE...abc
 ```
 
+### Deploy + grant a session-key guard (post-submission — see CHANGELOG.md)
+
+```bash
+# 1 — Deploy the guard against the existing ArcIDBond deployment
+npm run deploy:session-guard:arc
+
+# 2 — Move slasher authority from the raw consumer EOA to the guard
+ACTIVATE_SESSION_GUARD=true npm run deploy:session-guard:arc
+
+# 3 — Grant a bounded, expiring session key
+npm run session:grant -- \
+  --owner-key <guard-owner-private-key> \
+  --session-key <hot-wallet-address> \
+  --payout <fixed-payout-address> \
+  [--max-amount 0.01] \
+  [--expires-in 3600]
+
+# Revoke immediately (e.g. suspected leak)
+npm run session:revoke -- --owner-key <guard-owner-private-key>
+```
+
+Moves the consumer agent's on-chain slash/settlement authority off a
+plain EOA and onto a bounded session key: capped per-call amount, a fixed
+payout address the key cannot redirect, a single target contract
+(`ArcIDBond`, called only through the guard), and an expiry. Load the
+**session** key (not the owner key) as `CONSUMER_PRIVATE_KEY` in the running
+consumer agent's `.env`, plus `SESSION_GUARD_ADDRESS` from
+`deployments/<network>_session_guard.json`. The owner key stays offline.
+
 ### Proof-of-gating check
 
 ```bash
@@ -351,8 +381,9 @@ bond/slash contract, not from any new TEE involvement of its own.
 | 6 | Video script, submission form, checklist | ✅ Complete → [SUBMISSION.md](SUBMISSION.md) |
 | 7 | `ArcIDRegistryV2.sol` + `DCAPVerifier.sol` — native on-chain registry with real DCAP verification; `deploy:standalone` registers + bonds in one command; 10 new tests | ✅ Complete |
 | Post-submission | Payment execution — real Circle Gateway settlement + `ArcIDBond.recordSettlement()` audit trail on a clean verdict; 7 new tests | ✅ Complete → [CHANGELOG.md](CHANGELOG.md) |
+| Post-submission | `ConsumerSessionKeyGuard.sol` — session-key wallet hardening for the consumer agent's slash/settlement authority; 22 new tests | ✅ Complete → [CHANGELOG.md](CHANGELOG.md) |
 
-**Test suite:** 57 passing (`npm test`) — no external RPC, no `.env` required.
+**Test suite:** 79 passing (`npm test`) — no external RPC, no `.env` required.
 
 ---
 
@@ -373,7 +404,7 @@ The Circle-specific moat: **`ArcIDBond.sol` already supports any ERC-20** — th
 | `scripts/mint_usyc.js` | Mint USYC from USDC via Teller on Arc testnet |
 | `frontend/src/components/USYCBondCard.jsx` | Purple "yield-bearing" card with narrative + deployed contract address |
 
-**Test suite highlights (`npm test` — 57 passing total):**
+**Test suite highlights (`npm test` — 79 passing total):**
 
 ```
 USYC bond face value is $5.00 USDC at deposit time (sharePrice = $1.00)
@@ -711,6 +742,44 @@ constructor(address _collateralToken, address _registry)
 | `PaymentSettled(agent, consumer, amount, verdictHash)` | Successful `recordSettlement()` — post-submission (see [CHANGELOG.md](CHANGELOG.md)) |
 | `BondWithdrawn(agent, amount)` | Successful `withdrawBond()` |
 | `SlasherUpdated(oldSlasher, newSlasher)` | `setAuthorizedSlasher()` called |
+
+### `ConsumerSessionKeyGuard.sol` — post-submission (see [CHANGELOG.md](CHANGELOG.md))
+
+```solidity
+constructor(address _bond, address _owner)
+```
+
+Sits in front of `ArcIDBond` as its `authorizedSlasher` once activated
+(`ArcIDBond.setAuthorizedSlasher(guardAddress)`). Bounds the consumer agent's
+on-chain slash/settlement authority to a revocable, expiring, capped session
+key instead of a plain EOA with unbounded authority — closes the "leaked
+consumer key can slash any bonded agent's entire collateral to an
+attacker-chosen address" hole a raw `authorizedSlasher` EOA has, since
+`ArcIDBond.slash()` takes an arbitrary `consumer` address.
+
+Scope: hardens the on-chain call surface only (`slash()` /
+`recordSettlement()`). Circle Gateway payments are authorized off-chain via
+EIP-712 signatures relayed through Circle's API — a different authority
+model this contract does not cover.
+
+#### Functions
+
+| Function | Who | Description |
+|----------|-----|-------------|
+| `grantSessionKey(address sessionKey, address payoutAddress, uint256 maxAmountPerCall, uint64 expiresInSeconds)` | owner | Grants (or overwrites) the active session. `payoutAddress` is fixed on-chain — the session key can never redirect proceeds. |
+| `revokeSessionKey()` | owner | Immediately kills the active session (e.g. on suspected leak). |
+| `guardedSlash(address agent, string reason)` | sessionKey | Calls `ArcIDBond.slash(agent, payoutAddress, reason)`. Reverts if expired or unauthorized. |
+| `guardedRecordSettlement(address agent, uint256 amount, bytes32 verdictHash)` | sessionKey | Calls `ArcIDBond.recordSettlement(agent, payoutAddress, amount, verdictHash)`. Reverts `AmountExceedsCap` over the cap. |
+| `hasActiveSession()` | view | True if a session key is set and not expired. |
+
+#### Events
+
+| Event | When |
+|-------|------|
+| `SessionKeyGranted(sessionKey, payoutAddress, maxAmountPerCall, expiry)` | `grantSessionKey()` called |
+| `SessionKeyRevoked(sessionKey)` | `revokeSessionKey()` called |
+| `GuardedSlash(agent, sessionKey, reason)` | Successful `guardedSlash()` |
+| `GuardedSettlement(agent, sessionKey, amount, verdictHash)` | Successful `guardedRecordSettlement()` |
 
 ---
 

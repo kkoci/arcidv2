@@ -19,6 +19,13 @@ module.exports = {
   BOND_CONTRACT_ADDRESS: required("BOND_CONTRACT_ADDRESS"),
   ARC_RPC_URL:           process.env.ARC_RPC_URL || "http://127.0.0.1:8545",
 
+  // Session-key wallet hardening (Phase 6, post-submission — see CHANGELOG.md).
+  // When set, CONSUMER_PRIVATE_KEY is treated as a bounded session key and
+  // slash()/recordSettlement() calls route through this guard contract
+  // instead of hitting ArcIDBond directly. Unset: unchanged pre-Phase-6
+  // behavior (CONSUMER_PRIVATE_KEY calls ArcIDBond directly as authorizedSlasher).
+  SESSION_GUARD_ADDRESS: process.env.SESSION_GUARD_ADDRESS || "",
+
   // LLM
   ANTHROPIC_API_KEY: required("ANTHROPIC_API_KEY"),
   MODEL:             process.env.MODEL || "claude-sonnet-4-6",

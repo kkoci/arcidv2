@@ -219,6 +219,17 @@ scripts/cli/settle.js                npm run bond:settle — standalone recordSe
 CHANGELOG.md                         Transparency log for post-deadline commits
 ```
 
+Session-key wallet hardening files (post-submission, Phase 6 — see CHANGELOG.md):
+```
+contracts/ConsumerSessionKeyGuard.sol   Bounds consumer agent's slash/settlement authority to a capped, expiring session key
+contracts/interfaces/IArcIDBondSlash.sol Minimal slash()/recordSettlement() interface the guard calls
+test/ConsumerSessionKeyGuard.test.js    22 tests: grant/revoke, guarded slash/settlement, cap, expiry, mutual exclusion
+scripts/deploy_session_guard.js         Deploy guard against existing ArcIDBond; ACTIVATE_SESSION_GUARD=true flips authorizedSlasher
+scripts/cli/session-key.js              npm run session:grant / session:revoke
+consumer/src/slasher.js                 Routes through the guard when SESSION_GUARD_ADDRESS is set
+consumer/src/settlement.js              Same — guardedRecordSettlement() instead of recordSettlement() directly
+```
+
 ---
 
 ## ArcIDBond Contract Events
@@ -236,7 +247,7 @@ These events are the source of truth for the frontend live counters.
 
 ---
 
-## Test Suite (57 passing — run with `npm test`)
+## Test Suite (79 passing — run with `npm test`)
 
 ```
 test/ArcIDBond.test.js
@@ -259,6 +270,15 @@ ArcIDBond — USYC yield-bearing collateral (Phase 5)  [test/ArcIDBondUSYC.test.
   slash                   3   consumer gets USYC, worth > $5 after yield, agent can re-bond
   withdrawal              1   agent gets USYC back; redeems for more USDC via Teller
   multi-agent             1   two bonds coexist, yield accrues on both (TVL tracking)
+
+ConsumerSessionKeyGuard (post-submission, Phase 6 — see CHANGELOG.md)  [test/ConsumerSessionKeyGuard.test.js]
+  construction            2   bond/owner set, no active session by default
+  grantSessionKey         4   fields set, event, non-owner revert, overwrite
+  revokeSessionKey        4   cleared, event, non-owner revert, revoked key blocked
+  guardedSlash            6   fixed payout (not attacker-chosen), event, bond marked slashed,
+                               NotSessionKey, SessionExpired, session key has no direct bond authority
+  guardedRecordSettlement 6   within cap, event, AmountExceedsCap, cap boundary, NotSessionKey,
+                               AlreadySlashed mutual exclusion holds through the guard
 ```
 
 **Run tests:** `npm test` (no external RPC, no .env required — uses Hardhat in-memory network)
