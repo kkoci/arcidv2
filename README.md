@@ -9,11 +9,12 @@ Addresses Lepton's **Prior Art #8** (bonded agent reputation) and **RFB 3** (age
 > **Transparency note:** the submission form locked 2026-07-06. Payment
 > execution on a clean verdict (real Circle Gateway settlement +
 > `ArcIDBond.recordSettlement()`), session-key wallet hardening, a
-> deterministic anti-injection payment gate, and a spend-velocity circuit
-> breaker for the consumer agent were all added afterward, during the
-> (extended, ongoing) event window — judges track commit activity through
-> the end of the event, and no winner date had been announced at the time.
-> See [CHANGELOG.md](CHANGELOG.md) for the full breakdown, commit-by-commit.
+> deterministic anti-injection payment gate, a spend-velocity circuit
+> breaker, and an attributable audit trail for every settlement attempt were
+> all added afterward, during the (extended, ongoing) event window — judges
+> track commit activity through the end of the event, and no winner date had
+> been announced at the time. See [CHANGELOG.md](CHANGELOG.md) for the full
+> breakdown, commit-by-commit.
 
 ---
 
@@ -399,6 +400,20 @@ it, persists a tripped flag in the ledger, and halts every further
 settlement until a human runs `npm run breaker:resume` (in `consumer/`) —
 there is no automatic recovery path.
 
+**Corollary 3 (Phase 9, post-submission — see [CHANGELOG.md](CHANGELOG.md)):**
+`AgentSlashed` already gives the breach path a first-class, queryable record
+with Claude's rationale attached — before this, the payment path's
+provenance was scattered across three files with no single record per
+attempt. `consumer/src/auditTrail.js`'s `writeAuditRecord()` now runs at
+every exit point of `executeSettlement()` — settled, gated, circuit-breaker-
+blocked, payment-failed, on-chain-write-failed, or deduped — writing one
+uniform-schema line to `settlement_audit.jsonl` per attempt: agentId (from
+`ArcIDRegistryV2.agentIdBySigner()` if `REGISTRY_ADDRESS` is set), agent,
+payee, verdict hash, amount, Gateway tx hash, on-chain audit tx hash,
+outcome, and timestamp. "The agent paid, trust us" becomes "here is the
+exact authorization and receipt for every attempt" — the same standard the
+slash flow already meets.
+
 ---
 
 ## Phase Status
@@ -416,6 +431,7 @@ there is no automatic recovery path.
 | Post-submission | `ConsumerSessionKeyGuard.sol` — session-key wallet hardening for the consumer agent's slash/settlement authority; 22 new tests | ✅ Complete → [CHANGELOG.md](CHANGELOG.md) |
 | Post-submission | `consumer/src/paymentGate.js` — deterministic, non-LLM payee/amount/cap gate in front of Gateway settlement and the on-chain audit write | ✅ Complete → [CHANGELOG.md](CHANGELOG.md) |
 | Post-submission | Spend-velocity circuit breaker — rolling 1m/1h settlement spend caps, manual-only resume | ✅ Complete → [CHANGELOG.md](CHANGELOG.md) |
+| Post-submission | `consumer/src/auditTrail.js` — attributable audit record (agentId, payee, verdict hash, amount, tx hash) for every settlement attempt | ✅ Complete → [CHANGELOG.md](CHANGELOG.md) |
 
 **Test suite:** 79 passing (`npm test`) — no external RPC, no `.env` required.
 

@@ -41,6 +41,13 @@ module.exports = {
   MAX_SPEND_PER_MINUTE_USDC: process.env.MAX_SPEND_PER_MINUTE_USDC || "0.05",
   MAX_SPEND_PER_HOUR_USDC:   process.env.MAX_SPEND_PER_HOUR_USDC   || "1.0",
 
+  // Attributable audit trail (Phase 9, post-submission — see CHANGELOG.md).
+  // Optional. When set, auditTrail.js resolves the oracle wallet's real
+  // on-chain agentId from ArcIDRegistryV2 (free view call) and includes it
+  // in every settlement_audit.jsonl record. Unset: audit records still get
+  // written, just without the agentId field populated.
+  REGISTRY_ADDRESS: process.env.REGISTRY_ADDRESS || "",
+
   // LLM
   ANTHROPIC_API_KEY: required("ANTHROPIC_API_KEY"),
   MODEL:             process.env.MODEL || "claude-sonnet-4-6",

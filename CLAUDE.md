@@ -244,6 +244,15 @@ consumer/src/settlement.js              checkCircuitBreaker() — rolling 1m/1h 
 consumer/scripts/breaker.js             npm run breaker:status / breaker:resume — manual-only resume, no auto-recovery
 ```
 
+Attributable audit trail files (post-submission, Phase 9 — see CHANGELOG.md):
+```
+consumer/src/auditTrail.js              writeAuditRecord() — one uniform-schema line per settlement attempt in
+                                         settlement_audit.jsonl, regardless of outcome; resolves agentId from
+                                         ArcIDRegistryV2 via agentIdBySigner() if REGISTRY_ADDRESS is set
+consumer/src/settlement.js              Calls writeAuditRecord() at every exit path: settled, gated,
+                                         circuit_breaker, payment_failed, onchain_failed, deduped
+```
+
 ---
 
 ## ArcIDBond Contract Events

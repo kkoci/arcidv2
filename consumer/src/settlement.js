@@ -41,6 +41,12 @@
  * threshold, it trips a persisted breaker flag in the ledger and refuses —
  * every subsequent call stays refused until a manual
  * `npm run breaker:resume` (in consumer/). No auto-recovery.
+ *
+ * Phase 9 (post-submission — see CHANGELOG.md): every exit path below —
+ * settled, gated, circuit-breaker-blocked, payment-failed, on-chain-write-
+ * failed, or deduped — writes one attributableRecord via auditTrail.js, so
+ * "what happened to this clean verdict's payment" has a single, uniformly-
+ * shaped answer regardless of which path it took.
  */
 
 const fs     = require("fs");
@@ -49,6 +55,7 @@ const crypto = require("crypto");
 const { ethers } = require("ethers");
 const config = require("./config");
 const { gateGatewayPayment, gateOnChainRecord, PaymentGateError, PRICE_ATOMIC } = require("./paymentGate");
+const { writeAuditRecord } = require("./auditTrail");
 
 const LEDGER_PATH      = path.join(path.resolve(config.LOG_DIR), "settlement_ledger.json");
 const FAILURE_LOG_PATH = path.join(path.resolve(config.LOG_DIR), "settlement_failures.jsonl");
@@ -243,7 +250,13 @@ async function executeSettlement({ oracleResponse, verdict }) {
 
   const ledger = loadLedger();
   if (ledger[dedupeKey]) {
-    return { settled: false, skipped: "already settled for this service interaction", ...ledger[dedupeKey] };
+    const prior = ledger[dedupeKey];
+    await writeAuditRecord({
+      agent: config.ORACLE_WALLET_ADDRESS, payee: config.CONSUMER_WALLET_ADDRESS,
+      verdictHash: hash, serviceId, amount: prior.amount, txHash: prior.txHash, onChainTx: prior.onChainTx,
+      simulated: prior.simulated, outcome: "deduped", reason: "already settled for this service interaction",
+    });
+    return { settled: false, skipped: "already settled for this service interaction", ...prior };
   }
 
   const breakerCheck = checkCircuitBreaker(ledger, PRICE_ATOMIC);
@@ -251,7 +264,12 @@ async function executeSettlement({ oracleResponse, verdict }) {
     console.error(`\n  🛑 CIRCUIT BREAKER TRIPPED — settlement halted.`);
     console.error(`     ${breakerCheck.reason || "(previously tripped)"}`);
     console.error(`     Resume manually: npm run breaker:resume (in consumer/)\n`);
-    return { settled: false, circuitBreakerTripped: true, reason: breakerCheck.reason ?? "circuit breaker is tripped" };
+    const reason = breakerCheck.reason ?? "circuit breaker is tripped";
+    await writeAuditRecord({
+      agent: config.ORACLE_WALLET_ADDRESS, payee: config.CONSUMER_WALLET_ADDRESS,
+      verdictHash: hash, serviceId, outcome: "circuit_breaker", reason,
+    });
+    return { settled: false, circuitBreakerTripped: true, reason };
   }
 
   if (config.DEV_MODE) {
@@ -262,6 +280,11 @@ async function executeSettlement({ oracleResponse, verdict }) {
     const result = { settled: true, simulated: true, txHash: null, onChainTx: null, amount: PRICE_ATOMIC.toString() };
     ledger[dedupeKey] = { ...result, at: new Date().toISOString() };
     saveLedger(ledger);
+    await writeAuditRecord({
+      agent: config.ORACLE_WALLET_ADDRESS, payee: config.CONSUMER_WALLET_ADDRESS,
+      verdictHash: hash, serviceId, amount: result.amount, simulated: true,
+      outcome: "settled", reason: "DEV_MODE simulated settlement",
+    });
     return result;
   }
 
@@ -274,8 +297,13 @@ async function executeSettlement({ oracleResponse, verdict }) {
     const priceUrl = `${config.ORACLE_URL}/api/price`;
     ({ amount, transaction } = await client.pay(priceUrl));
   } catch (err) {
-    const stage = err instanceof PaymentGateError ? "payment-gate" : "gateway-payment";
+    const gated = err instanceof PaymentGateError;
+    const stage = gated ? "payment-gate" : "gateway-payment";
     logFailure({ serviceId, verdictHash: hash, stage, error: err.message });
+    await writeAuditRecord({
+      agent: config.ORACLE_WALLET_ADDRESS, payee: config.CONSUMER_WALLET_ADDRESS,
+      verdictHash: hash, serviceId, outcome: gated ? "gated" : "payment_failed", reason: err.message,
+    });
     return { settled: false, error: err.message };
   }
 
@@ -285,6 +313,8 @@ async function executeSettlement({ oracleResponse, verdict }) {
   // amount actually paid diverged from the agreed price somewhere between
   // payment and this call — refuse the on-chain write and flag it loudly.
   let onChainTx = null;
+  let onChainOutcome = "settled";
+  let onChainReason = null;
   try {
     gateOnChainRecord({ agent: config.ORACLE_WALLET_ADDRESS, amount: amount ?? 0n });
     onChainTx = await recordSettlementOnChain({
@@ -294,8 +324,11 @@ async function executeSettlement({ oracleResponse, verdict }) {
       hash,
     });
   } catch (err) {
-    const stage = err instanceof PaymentGateError ? "payment-gate" : "on-chain-audit";
+    const gated = err instanceof PaymentGateError;
+    const stage = gated ? "payment-gate" : "on-chain-audit";
     logFailure({ serviceId, verdictHash: hash, stage, gatewayTx: transaction, error: err.message });
+    onChainOutcome = gated ? "gated" : "onchain_failed";
+    onChainReason  = err.message;
   }
 
   const result = {
@@ -307,6 +340,12 @@ async function executeSettlement({ oracleResponse, verdict }) {
   };
   ledger[dedupeKey] = { ...result, at: new Date().toISOString() };
   saveLedger(ledger);
+  await writeAuditRecord({
+    agent: config.ORACLE_WALLET_ADDRESS, payee: config.CONSUMER_WALLET_ADDRESS,
+    verdictHash: hash, serviceId, amount: result.amount, txHash: result.txHash, onChainTx: result.onChainTx,
+    simulated: false, outcome: onChainOutcome,
+    reason: onChainReason ?? "Gateway payment settled + on-chain audit record written",
+  });
   return result;
 }
 
