@@ -350,6 +350,36 @@ scripts/cli/_lib.js                     requireEnvKey() / normalizePrivateKey() 
                                          eth_chainId probing, reduces RPC rate-limit pressure)
 ```
 
+Optimistic challenge window files (post-submission, arcid2 Phase 6, Phase 6.1 —
+see CHANGELOG.md):
+```
+contracts/ArcIDBond.sol                 DisputeState enum, Dispute struct, challengeThreshold/disputeWindow
+                                         (owner-tunable), disputes mapping, nextDisputeId. slash()'s body
+                                         extracted unchanged into _executeSlash() (shared with dispute
+                                         resolution); previewSlash()'s body extracted into _previewSlash()
+                                         (shared by 3 callers). slash() gained a threshold gate — non-
+                                         escalating Semantic amounts above challengeThreshold now revert
+                                         ChallengeThresholdExceeded. New: fileIndictment() (authorizedSlasher-
+                                         only, records a dispute, does NOT move funds), resolveDispute()
+                                         (owner-only interim resolver — NatSpec states verbatim this is a
+                                         placeholder, not the end state), finalizeExpiredDispute()
+                                         (permissionless, the actual "optimistic" default-execute path),
+                                         setChallengeParameters(). New events: IndictmentFiled,
+                                         DisputeResolved, ChallengeParametersUpdated.
+test/ArcIDDispute.test.js               25 new tests — the mutually-exclusive slash()/fileIndictment()
+                                         partition, escalation always bypassing the gate, fresh-recompute-
+                                         at-resolution (proven via an intervening Hard breach shrinking the
+                                         bond between indictment and resolution), and the documented
+                                         AlreadySlashed-stuck-dispute edge case
+```
+Extended `ArcIDBond.sol` directly rather than a companion `ArcIDDispute.sol`
+— the dispute path needs `_computeSlashAmount()`, `bonds`/`breachEpochs`/
+`blacklisted`, and the same escalation bookkeeping `slash()` already has,
+all `internal` to `ArcIDBond`; splitting it out would mean exposing all of
+that as a second privileged cross-contract surface for no real benefit.
+Off-chain wiring (`slashGate.js`), CLI dispute-resolution tooling, and
+live-verified demo commands are later phases of the same doc, not yet built.
+
 ---
 
 ## ArcIDBond Contract Events
@@ -366,10 +396,13 @@ These events are the source of truth for the frontend live counters.
 | `PaymentSettled(agent, consumer, amount, verdictHash)` | all parties, amount, off-chain verdict hash | Post-submission (see CHANGELOG.md) — "no breach" counterpart to `AgentSlashed`; does not move funds |
 | `BondWithdrawn(agent, amount)` | agent, amount | TVL update |
 | `SlasherUpdated(old, new)` | wallet addrs | Admin audit |
+| `IndictmentFiled(disputeId, agent, consumer, claimAmount, challengeDeadline, rationaleHash)` | dispute id, parties, indictment-time amount, deadline, evidence hash | Post-submission Phase 6.1 (see CHANGELOG.md) — a large semantic slash held pending dispute instead of executing |
+| `DisputeResolved(disputeId, approved, amountTransferred, autoFinalized)` | dispute id, outcome, actual transferred amount, whether it was owner-resolved or deadline-finalized | Post-submission Phase 6.1 — closes out an `IndictmentFiled`; `amountTransferred` is 0 on rejection |
+| `ChallengeParametersUpdated(challengeThreshold, disputeWindow)` | new threshold/window | Post-submission Phase 6.1 — admin audit |
 
 ---
 
-## Test Suite (104 passing — run with `npm test`)
+## Test Suite (129 passing — run with `npm test`)
 
 ```
 test/ArcIDBond.test.js
@@ -422,6 +455,23 @@ Phase 4 — see CHANGELOG.md)  [test/ArcIDBondSlashClasses.test.js]
   events                      3   BreachClassified fields, AgentEscalatedAndBlacklisted only
                                   on escalation, not emitted otherwise
   admin setters               4   InvalidBps, InvalidThreshold, events, non-owner reverts
+
+ArcIDBond — optimistic challenge window (post-submission, arcid2 Phase 6.1
+— see CHANGELOG.md)  [test/ArcIDDispute.test.js]
+  slash() threshold gate      4   instant below threshold, ChallengeThresholdExceeded above it,
+                                   Hard never gated, escalation never gated even when large
+  fileIndictment()            8   records dispute + IndictmentFiled, NotAuthorizedSlasher,
+                                   ChallengeThresholdNotExceeded, EscalatingBreachNotDisputable,
+                                   NoBondFound, AlreadySlashed, disputeId increments, does NOT
+                                   mutate breachEpochs at indictment time
+  resolveDispute()            7   owner approval executes + transfers, owner rejection leaves
+                                   bond untouched, non-owner revert, unknown/already-resolved
+                                   disputeId, fresh recompute at resolution (not the stored
+                                   claimAmount), AlreadySlashed leaves dispute stuck Indicted
+                                   (documented limitation, not silently wrong)
+  finalizeExpiredDispute()    3   ChallengeWindowNotExpired before deadline, permissionless
+                                   auto-execute after deadline, DisputeNotIndicted if already resolved
+  admin setChallengeParameters 3  updates + event, InvalidDisputeWindow on zero, non-owner revert
 ```
 
 **Run tests:** `npm test` (no external RPC, no .env required — uses Hardhat in-memory network)
@@ -525,6 +575,8 @@ the test that proves the moat. It must always pass. Do not weaken the assertion.
 - `slash()` MUST compute its amount internally from on-chain config/state only (post-submission Phase 4). No caller — not even `ConsumerSessionKeyGuard` — may supply or influence the transferred amount. `slash()`'s ABI has no `amount` parameter; this is enforced structurally, not just by convention.
 - A single `slash()` call below its breach class's rolling-24h escalation threshold MUST NOT transfer more than that class's `capBps` share of the *remaining* bond. Only an escalating call (threshold crossed) may take the full remainder — and doing so MUST also permanently blacklist the agent.
 - Bond amount MUST be transferred to contract on `postBond`, to consumer on `slash` (now the internally-computed proportional or full-drain amount, not always the full bond), back to agent on `withdraw` (whatever currently remains). No funds stuck in contract.
+- A non-escalating Semantic breach whose computed amount exceeds `challengeThreshold` MUST NOT execute via `slash()` — it MUST revert `ChallengeThresholdExceeded` (post-submission Phase 6.1). The only paths to move funds for such a breach are `resolveDispute()` (owner-approved) or `finalizeExpiredDispute()` (deadline passed, unresolved). Hard breaches and any escalating breach are NEVER subject to this gate, at any size — enforced on-chain, not just by off-chain convention.
+- `resolveDispute()`/`finalizeExpiredDispute()` MUST recompute the slash amount fresh via `_computeSlashAmount()` at resolution time — never trust the `claimAmount` stored at indictment time. A bond-state change between indictment and resolution must be reflected in what actually transfers.
 
 ---
 

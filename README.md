@@ -456,8 +456,9 @@ slash flow already meets.
 | Post-submission | `consumer/src/slashGate.js` — deterministic payee/target/classification/verdict-hash gate in front of `slash()`, mirroring `paymentGate.js` | ✅ Complete → [CHANGELOG.md](CHANGELOG.md) |
 | Post-submission | Proportional breach-class slashing + epoch escalation in `ArcIDBond.sol`; 25 new tests | ✅ Complete → [CHANGELOG.md](CHANGELOG.md) |
 | Post-submission | `breachClass` wiring (slasher.js, oracle trigger-cycle, CLI) + `demo:hard-breach`/`demo:semantic-breach`; new `bad-price` oracle fault mode; live-verified against the redeployed contract | ✅ Complete → [CHANGELOG.md](CHANGELOG.md) |
+| Post-submission | Phase 6.1: optimistic challenge window in `ArcIDBond.sol` — large semantic slashes held pending dispute (owner-only interim resolver, stated as a placeholder — see Future Work) instead of executing instantly; auto-finalizes if unresolved; 25 new tests | ✅ Complete → [CHANGELOG.md](CHANGELOG.md) |
 
-**Test suite:** 104 passing (`npm test`) — no external RPC, no `.env` required.
+**Test suite:** 129 passing (`npm test`) — no external RPC, no `.env` required.
 
 ---
 
@@ -856,6 +857,11 @@ constructor(address _collateralToken, address _registry)
 | `setSlashParameters(uint256 k, uint256 semanticCapBps, uint256 hardCapBps)` | owner | Post-submission Phase 4. Retune the slash-amount schedule. |
 | `setServiceFee(uint256 serviceFeeAtomic)` | owner | Post-submission Phase 4. Retune the fee basis used in the semantic-tier `k × fee` term. |
 | `setEscalationThresholds(uint16 hard, uint16 semantic)` | owner | Post-submission Phase 4. Retune breaches-per-24h-epoch before full-drain escalation. |
+| `fileIndictment(address agent, address consumer, bytes32 rationaleHash)` | authorizedSlasher | Post-submission Phase 6.1 (see [CHANGELOG.md](CHANGELOG.md)). Holds a non-escalating Semantic slash whose amount exceeds `challengeThreshold` pending dispute instead of executing it. Reverts `ChallengeThresholdNotExceeded` / `EscalatingBreachNotDisputable` if the call should have gone through `slash()` instead — the two functions are mutually exclusive by on-chain state, not convention. |
+| `resolveDispute(uint256 disputeId, bool approved)` | owner | Post-submission Phase 6.1. Interim resolver (Option A — explicitly a placeholder, see Future Work). Approval recomputes the slash amount fresh via the same formula `slash()` uses, not the amount stored at indictment time. Rejection leaves the bond untouched. |
+| `finalizeExpiredDispute(uint256 disputeId)` | anyone | Post-submission Phase 6.1. Permissionless. Once `challengeDeadline` passes with no `resolveDispute()` call, executes the slash as if approved — the "optimistic" default. |
+| `previewSlash` / `disputes(uint256)` / `nextDisputeId` | view | Post-submission Phase 6.1. `disputes(id)` returns the full `Dispute` struct; `nextDisputeId` is the 1-based upper bound for CLI listing. |
+| `setChallengeParameters(uint256 challengeThreshold, uint64 disputeWindow)` | owner | Post-submission Phase 6.1. Retune the challenge-window threshold (atomic units of collateralToken) and window duration (seconds, must be nonzero). |
 
 #### Events
 
@@ -869,6 +875,9 @@ constructor(address _collateralToken, address _registry)
 | `BondWithdrawn(agent, amount)` | Successful `withdrawBond()` |
 | `SlasherUpdated(oldSlasher, newSlasher)` | `setAuthorizedSlasher()` called |
 | `SlashParametersUpdated` / `ServiceFeeUpdated` / `EscalationThresholdsUpdated` | Respective admin setters called — post-submission Phase 4 |
+| `IndictmentFiled(disputeId, agent, consumer, claimAmount, challengeDeadline, rationaleHash)` | Successful `fileIndictment()` — post-submission Phase 6.1 |
+| `DisputeResolved(disputeId, approved, amountTransferred, autoFinalized)` | Successful `resolveDispute()` or `finalizeExpiredDispute()` — post-submission Phase 6.1 |
+| `ChallengeParametersUpdated(challengeThreshold, disputeWindow)` | `setChallengeParameters()` called — post-submission Phase 6.1 |
 
 ### `ConsumerSessionKeyGuard.sol` — post-submission (see [CHANGELOG.md](CHANGELOG.md))
 
@@ -982,7 +991,8 @@ curl https://<cvm-hash>-3001.dstack-pha-prod5.phala.network/api/attest | jq .rea
 
 ## Future Work
 
-- **Decentralized multi-slasher:** dispute window + N-of-M slasher quorum (intentionally out of scope for hackathon cadence)
+- **Decentralized dispute resolution (Kleros or equivalent):** the actual target for `resolveDispute()`'s authority. The optimistic challenge window (post-submission Phase 6.1 — see [CHANGELOG.md](CHANGELOG.md)) ships the state machine now with the existing `owner` role wired in as an explicitly-labeled interim resolver — a known centralization point, stated rather than hidden. Prerequisite work before integrating a real arbitration layer: confirm its cross-chain story against Arc, and get real dispute-volume data from the interim system first. A multi-model LLM quorum was considered and rejected — correlated model failure doesn't buy the independence a human/economic arbitration layer does.
+- **Provider-side contest tooling:** today a disputed provider has no way to actively argue their case beyond what's already in the recorded evidence — the owner reviews Claude's rationale, not a rebuttal. Appropriate once a real resolver (above) is in place; building rebuttal tooling around a single-owner interim resolver would be investing in the wrong long-term architecture.
 - **Broker agent:** chooses which bonded provider to route to based on bond size + slash record (Phase 3 stretch)
 - **USYC redemption flow:** yield tracking per bond via Teller
 

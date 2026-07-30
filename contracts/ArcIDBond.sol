@@ -55,6 +55,43 @@ import {IArcIDBondSlash} from "./interfaces/IArcIDBondSlash.sol";
 ///   session-key-guard-vs-ERC-4337 scope call in Phase 6 of the
 ///   payment-execution doc.
 ///
+/// OPTIMISTIC CHALLENGE WINDOW (Phase 6, post-submission — see CHANGELOG.md)
+///   A single Claude-authored semantic verdict deciding a large slash in one
+///   shot is a real single-point-of-failure risk once amounts get big
+///   enough to matter. Above `challengeThreshold`, a semantic slash is no
+///   longer instant: slash() itself reverts (ChallengeThresholdExceeded)
+///   and the off-chain consumer must call fileIndictment() instead, which
+///   records the claim and starts a `disputeWindow` countdown rather than
+///   moving funds immediately. It resolves one of two ways:
+///     - resolveDispute() — the interim resolver (Option A: `owner`, stated
+///       explicitly as a placeholder, NOT the end state — see NatSpec on
+///       resolveDispute() itself) approves or rejects before the deadline.
+///     - finalizeExpiredDispute() — permissionless; if nobody resolves it
+///       before the deadline, the indictment finalizes as approved. This
+///       default-execute (not default-block) behavior is what makes the
+///       window "optimistic" rather than a veto gate.
+///   Both paths recompute the transferred amount at resolution time via the
+///   same _computeSlashAmount() slash() uses — never trusting whatever the
+///   amount looked like at indictment time — so the amount can't be
+///   pre-baked incorrectly if the bond's state changed in between.
+///
+///   Deliberately NOT disputable, regardless of size: Hard (Tier 1) breaches
+///   — mechanical certainty doesn't need a second checkpoint — and any
+///   breach that would cross this agent's epoch escalation threshold, which
+///   always executes instantly through slash() even if classified Semantic
+///   — an escalation is a compounding pattern backed by multiple already-
+///   confirmed prior breaches, not a single fresh judgment call, so the
+///   risk the window exists to catch doesn't apply the same way. Both
+///   scope limits are enforced on-chain (slash()/fileIndictment() revert on
+///   misuse), not just by off-chain convention.
+///
+///   Roadmap: a decentralized resolver (Kleros or equivalent) is the actual
+///   target for resolveDispute()'s authority — see README. A multi-model
+///   LLM quorum was considered and rejected: models trained on similar data
+///   with similar biases can fail in a correlated way on the same input,
+///   so adding more LLM votes doesn't buy real independence the way a
+///   human/economic arbitration layer does.
+///
 /// SIMPLIFICATIONS (deliberate, note in writeup)
 ///   - authorizedSlasher defaults to the deployer wallet.  For the hackathon
 ///     the consumer agent runs under this key.  A multi-slasher / dispute-
@@ -87,6 +124,26 @@ contract ArcIDBond is Ownable, ReentrancyGuard, IArcIDBondSlash {
         uint64 epochStart;
         uint16 hardCount;
         uint16 semanticCount;
+    }
+
+    /// @dev Optimistic challenge window (Phase 6). `None` is also the zero
+    ///      value, so `disputes[id].state == None` doubles as "this
+    ///      disputeId was never filed" — no separate existence flag needed.
+    enum DisputeState { None, Indicted, Resolved }
+
+    /// @dev `claimAmount` is what the amount WOULD be at indictment time —
+    ///      informational only. The actual transferred amount is always
+    ///      recomputed fresh at resolution via _computeSlashAmount(); this
+    ///      struct never stores a number that resolution trusts blindly.
+    ///      No breachClass field: disputes are semantic-only by
+    ///      construction (see fileIndictment()), so it's implicit.
+    struct Dispute {
+        address consumer;
+        address provider;
+        uint256 claimAmount;
+        uint256 challengeDeadline;
+        bytes32 rationaleHash;
+        DisputeState state;
     }
 
     // -------------------------------------------------------------------------
@@ -129,6 +186,20 @@ contract ArcIDBond is Ownable, ReentrancyGuard, IArcIDBondSlash {
     uint256 public hardCapBps           = 1_000; // 10% of remaining bond
     uint16  public hardEscalationThreshold     = 3; // hard breaches per epoch before full-drain
     uint16  public semanticEscalationThreshold = 5; // semantic breaches per epoch before full-drain
+
+    /// @dev Optimistic challenge window config (Phase 6) — owner-tunable,
+    ///      same pattern as the slash schedule above. Default threshold is
+    ///      set at a real-world-meaningful level ($1.00), well above what
+    ///      today's live testnet bond sizes and fee config actually produce
+    ///      per semantic slash — demoing a real crossing intentionally
+    ///      requires scaling the demo's inputs, not lowering this default
+    ///      to something that trivially trips on every breach (see the
+    ///      Phase 6.4 demo commands' own honesty note about that).
+    uint256 public challengeThreshold = 1_000_000; // $1.00 USDC @ 6 decimals
+    uint64  public disputeWindow      = 24 hours;
+
+    mapping(uint256 => Dispute) public disputes;
+    uint256 public nextDisputeId; // 1-based; 0 is never a real disputeId
 
     // -------------------------------------------------------------------------
     // events — consumed by the frontend live counters and the consumer agent log
@@ -204,6 +275,35 @@ contract ArcIDBond is Ownable, ReentrancyGuard, IArcIDBondSlash {
     /// @dev Emitted when the owner retunes the escalation thresholds.
     event EscalationThresholdsUpdated(uint16 hardThreshold, uint16 semanticThreshold);
 
+    /// @dev Emitted by fileIndictment() — a large semantic slash held
+    ///      pending dispute instead of executing immediately. `claimAmount`
+    ///      is the amount at indictment time (informational; see Dispute
+    ///      struct docs). `rationaleHash` ties back to the off-chain
+    ///      Claude evidence, same pattern as PaymentSettled's verdictHash.
+    event IndictmentFiled(
+        uint256 indexed disputeId,
+        address indexed agent,
+        address indexed consumer,
+        uint256 claimAmount,
+        uint256 challengeDeadline,
+        bytes32 rationaleHash
+    );
+
+    /// @dev Emitted by resolveDispute() or finalizeExpiredDispute(). On
+    ///      approval (owner-approved or auto-finalized), the same
+    ///      AgentSlashed + BreachClassified events also fire from the
+    ///      underlying _executeSlash() call. On rejection, this is the
+    ///      only event — no funds moved, bond untouched.
+    event DisputeResolved(
+        uint256 indexed disputeId,
+        bool    approved,
+        uint256 amountTransferred,
+        bool    autoFinalized
+    );
+
+    /// @dev Emitted when the owner retunes the challenge-window config.
+    event ChallengeParametersUpdated(uint256 challengeThreshold, uint64 disputeWindow);
+
     // -------------------------------------------------------------------------
     // custom errors (gas-efficient; BondPosted gating uses require() for demo UX)
     // -------------------------------------------------------------------------
@@ -217,6 +317,12 @@ contract ArcIDBond is Ownable, ReentrancyGuard, IArcIDBondSlash {
     error AgentBlacklisted();
     error InvalidBps();
     error InvalidThreshold();
+    error InvalidDisputeWindow();
+    error ChallengeThresholdExceeded();   // slash(): amount too large for instant execution — use fileIndictment()
+    error ChallengeThresholdNotExceeded(); // fileIndictment(): amount too small to dispute — use slash()
+    error EscalatingBreachNotDisputable(); // fileIndictment(): this call would escalate — use slash()
+    error DisputeNotIndicted();            // resolveDispute()/finalizeExpiredDispute(): unknown or already-resolved disputeId
+    error ChallengeWindowNotExpired();     // finalizeExpiredDispute(): deadline hasn't passed yet
 
     // -------------------------------------------------------------------------
     // constructor
@@ -285,6 +391,13 @@ contract ArcIDBond is Ownable, ReentrancyGuard, IArcIDBondSlash {
     ///         config and on-chain state — callers, including
     ///         ConsumerSessionKeyGuard, cannot pass or influence an amount.
     ///
+    ///         Phase 6: a non-escalating Semantic breach whose computed
+    ///         amount exceeds `challengeThreshold` reverts here
+    ///         (ChallengeThresholdExceeded) — the caller must use
+    ///         fileIndictment() instead. Hard breaches and any escalating
+    ///         breach are never subject to this gate, at any size — see the
+    ///         contract-level NatSpec's Optimistic Challenge Window section.
+    ///
     /// @param agent       The bonded provider agent that underdelivered.
     /// @param consumer    The consumer wallet that paid for the service.
     /// @param reason      LLM-authored (or Tier 1 machine-generated) rationale.
@@ -298,6 +411,28 @@ contract ArcIDBond is Ownable, ReentrancyGuard, IArcIDBondSlash {
     ) external nonReentrant {
         if (msg.sender != authorizedSlasher) revert NotAuthorizedSlasher();
 
+        if (breachClass == BreachClass.Semantic) {
+            (uint256 previewAmount, bool wouldEscalate) = _previewSlash(agent, breachClass);
+            if (!wouldEscalate && previewAmount > challengeThreshold) {
+                revert ChallengeThresholdExceeded();
+            }
+        }
+
+        _executeSlash(agent, consumer, reason, breachClass);
+    }
+
+    /// @dev Shared by slash() (instant path) and resolveDispute() /
+    ///      finalizeExpiredDispute() (Phase 6 dispute path) so the actual
+    ///      fund-moving + epoch/escalation bookkeeping logic exists in
+    ///      exactly one place. This is the entire body of what slash() did
+    ///      before Phase 6 — unchanged behavior, just callable from a
+    ///      second entry point.
+    function _executeSlash(
+        address agent,
+        address consumer,
+        string memory reason,
+        BreachClass breachClass
+    ) internal returns (uint256 amount) {
         BondInfo storage b = bonds[agent];
         if (b.postedAt == 0) revert NoBondFound();
         if (b.slashed)       revert AlreadySlashed();
@@ -323,7 +458,6 @@ contract ArcIDBond is Ownable, ReentrancyGuard, IArcIDBondSlash {
             escalated = newCount >= semanticEscalationThreshold;
         }
 
-        uint256 amount;
         if (escalated) {
             amount = b.amount;
             b.amount = 0;
@@ -387,6 +521,16 @@ contract ArcIDBond is Ownable, ReentrancyGuard, IArcIDBondSlash {
     function previewSlash(address agent, BreachClass breachClass)
         external view returns (uint256 amount, bool wouldEscalate)
     {
+        return _previewSlash(agent, breachClass);
+    }
+
+    /// @dev Shared by previewSlash() (external, read-only) and slash() /
+    ///      fileIndictment() (which both need this to decide, respectively,
+    ///      whether to revert into the dispute path or accept an
+    ///      indictment) — one formula, three callers, so they can never drift.
+    function _previewSlash(address agent, BreachClass breachClass)
+        internal view returns (uint256 amount, bool wouldEscalate)
+    {
         BondInfo storage b = bonds[agent];
         if (b.postedAt == 0 || b.slashed) return (0, false);
 
@@ -440,6 +584,137 @@ contract ArcIDBond is Ownable, ReentrancyGuard, IArcIDBondSlash {
         settledVerdicts[verdictHash] = true;
 
         emit PaymentSettled(agent, consumer, amount, verdictHash);
+    }
+
+    // -------------------------------------------------------------------------
+    // core: optimistic challenge window (Phase 6, post-submission — see CHANGELOG.md)
+    // -------------------------------------------------------------------------
+
+    /// @notice Hold a large semantic slash pending dispute instead of
+    ///         executing it immediately. Called by the off-chain consumer's
+    ///         post-verdict handler — the same authorizedSlasher key that
+    ///         would otherwise have called slash() directly — the moment it
+    ///         determines the amount exceeds `challengeThreshold`. There is
+    ///         no separate human "file a dispute" action; this IS the
+    ///         verdict handler's response to a large semantic breach.
+    ///
+    ///         Always evaluated as BreachClass.Semantic — Hard breaches
+    ///         never reach this function; there's no breachClass parameter
+    ///         to misuse, by construction. Reverts if this breach would
+    ///         escalate (EscalatingBreachNotDisputable — escalations always
+    ///         execute instantly through slash(), regardless of size) or if
+    ///         the amount doesn't actually exceed the threshold
+    ///         (ChallengeThresholdNotExceeded — should have gone through
+    ///         slash() instead). Together with slash()'s own threshold
+    ///         check, this makes "which function do I call" a fact about
+    ///         on-chain state, not a convention the caller has to get right.
+    ///
+    /// @param agent          The bonded provider agent being disputed.
+    /// @param consumer       The consumer wallet that would receive the slash.
+    /// @param rationaleHash  keccak256 of the off-chain Claude evidence —
+    ///                       same verdictHash pattern as PaymentSettled.
+    ///                       The full rationale text lives in the consumer's
+    ///                       own audit log, not on-chain.
+    /// @return disputeId     1-based identifier for dispute:list / dispute:resolve.
+    function fileIndictment(
+        address agent,
+        address consumer,
+        bytes32 rationaleHash
+    ) external nonReentrant returns (uint256 disputeId) {
+        if (msg.sender != authorizedSlasher) revert NotAuthorizedSlasher();
+
+        BondInfo storage b = bonds[agent];
+        if (b.postedAt == 0) revert NoBondFound();
+        if (b.slashed)       revert AlreadySlashed();
+
+        (uint256 previewAmount, bool wouldEscalate) = _previewSlash(agent, BreachClass.Semantic);
+        if (wouldEscalate) revert EscalatingBreachNotDisputable();
+        if (previewAmount <= challengeThreshold) revert ChallengeThresholdNotExceeded();
+
+        disputeId = ++nextDisputeId;
+        uint256 deadline = block.timestamp + disputeWindow;
+
+        disputes[disputeId] = Dispute({
+            consumer:          consumer,
+            provider:          agent,
+            claimAmount:       previewAmount,
+            challengeDeadline: deadline,
+            rationaleHash:     rationaleHash,
+            state:             DisputeState.Indicted
+        });
+
+        emit IndictmentFiled(disputeId, agent, consumer, previewAmount, deadline, rationaleHash);
+    }
+
+    /// @notice Resolve a pending dispute before its deadline.
+    ///
+    /// @dev    Interim resolver: this function is currently owner-only.
+    ///         This is a placeholder for a decentralized dispute-resolution
+    ///         integration (see README) once dispute volume and stakes
+    ///         justify that integration's cost. A single owner-controlled
+    ///         resolver is a known centralization point, stated here rather
+    ///         than obscured.
+    ///
+    ///         On approval the amount is recomputed fresh via
+    ///         _computeSlashAmount() at resolution time — never trusted
+    ///         from the indictment's stored claimAmount — so a bond change
+    ///         between indictment and resolution can't produce a stale or
+    ///         manipulated transfer. On rejection, nothing moves and the
+    ///         provider's bond is untouched.
+    ///
+    ///         KNOWN LIMITATION: if the agent's bond was independently
+    ///         fully slashed (e.g. by an escalation from an unrelated
+    ///         breach) between indictment and resolution, an approval here
+    ///         reverts (AlreadySlashed) and the dispute is left stuck in
+    ///         Indicted state with no way to close it out. This is a
+    ///         genuinely rare interleaving, documented rather than solved
+    ///         this phase — same "note the edge case, don't engineer it
+    ///         away at hackathon scope" pattern as the slash schedule's
+    ///         cliff behavior above.
+    ///
+    /// @param disputeId Dispute to resolve.
+    /// @param approved  true = execute the slash now; false = dismiss it.
+    function resolveDispute(uint256 disputeId, bool approved) external onlyOwner nonReentrant {
+        Dispute storage d = disputes[disputeId];
+        if (d.state != DisputeState.Indicted) revert DisputeNotIndicted();
+
+        d.state = DisputeState.Resolved;
+
+        uint256 amount;
+        if (approved) {
+            amount = _executeSlash(
+                d.provider,
+                d.consumer,
+                "[DISPUTE APPROVED] see rationaleHash on IndictmentFiled event",
+                BreachClass.Semantic
+            );
+        }
+
+        emit DisputeResolved(disputeId, approved, amount, false);
+    }
+
+    /// @notice Permissionlessly finalize a dispute whose challenge window
+    ///         has expired with no resolveDispute() call — the "optimistic"
+    ///         default: unless the interim resolver intervenes, the
+    ///         indictment executes exactly as if approved. Anyone may call
+    ///         this once the deadline has passed; there's no privileged
+    ///         decision being made, only a deterministic deadline check.
+    /// @param disputeId Dispute to finalize.
+    function finalizeExpiredDispute(uint256 disputeId) external nonReentrant {
+        Dispute storage d = disputes[disputeId];
+        if (d.state != DisputeState.Indicted) revert DisputeNotIndicted();
+        if (block.timestamp < d.challengeDeadline) revert ChallengeWindowNotExpired();
+
+        d.state = DisputeState.Resolved;
+
+        uint256 amount = _executeSlash(
+            d.provider,
+            d.consumer,
+            "[DISPUTE AUTO-FINALIZED] see rationaleHash on IndictmentFiled event",
+            BreachClass.Semantic
+        );
+
+        emit DisputeResolved(disputeId, true, amount, true);
     }
 
     // -------------------------------------------------------------------------
@@ -514,5 +789,17 @@ contract ArcIDBond is Ownable, ReentrancyGuard, IArcIDBondSlash {
         hardEscalationThreshold     = _hardThreshold;
         semanticEscalationThreshold = _semanticThreshold;
         emit EscalationThresholdsUpdated(_hardThreshold, _semanticThreshold);
+    }
+
+    /// @notice Retune the optimistic challenge window. `_challengeThreshold`
+    ///         is in atomic units of collateralToken; `_disputeWindow` is a
+    ///         duration in seconds and must be nonzero (a zero window would
+    ///         make finalizeExpiredDispute() callable in the same block as
+    ///         fileIndictment(), defeating the point of a window at all).
+    function setChallengeParameters(uint256 _challengeThreshold, uint64 _disputeWindow) external onlyOwner {
+        if (_disputeWindow == 0) revert InvalidDisputeWindow();
+        challengeThreshold = _challengeThreshold;
+        disputeWindow      = _disputeWindow;
+        emit ChallengeParametersUpdated(_challengeThreshold, _disputeWindow);
     }
 }
