@@ -253,6 +253,17 @@ consumer/src/settlement.js              Calls writeAuditRecord() at every exit p
                                          circuit_breaker, payment_failed, onchain_failed, deduped
 ```
 
+Tiered slash adjudication files (post-submission, tiered-adjudication doc, Phase 1 — see CHANGELOG.md):
+```
+consumer/src/deterministicVerifier.js   verifyDeterministic() — Tier 1: signature_valid, timestamp_fresh,
+                                         schema_valid, attestation_current (optional; caveated "still
+                                         registered", not a true lapse check — ArcIDRegistryV2 has no expiry).
+                                         hard_breach short-circuits straight to slash, no LLM call at all.
+                                         Own log channel: deterministic_breaches.jsonl
+consumer/src/index.js                   Runs verifyDeterministic() before adjudicate(); Tier 2 (Claude) only
+                                         ever sees responses that already passed every Tier 1 check
+```
+
 ---
 
 ## ArcIDBond Contract Events

@@ -3,9 +3,13 @@
  *
  * Autonomous loop that:
  *   1. Pays $0.001 USDC for each oracle call via x402
- *   2. Verifies the oracle's signed response
- *   3. Passes response to Claude for LLM-reasoned adjudication
- *   4. Slashes the oracle on-chain on confirmed breach
+ *   2. Runs the Tier 1 deterministic verifier (signature, freshness, schema —
+ *      see deterministicVerifier.js, tiered-adjudication Phase 1). A hard
+ *      breach short-circuits straight to slash with no LLM call at all.
+ *   3. Only if Tier 1 passes: hands off to Claude for Tier 2 semantic
+ *      adjudication.
+ *   4. Slashes the oracle on-chain on confirmed breach (either tier);
+ *      settles payment via Gateway on a clean verdict.
  *   5. Logs every cycle to JSONL for traction reporting
  *
  * Usage:
@@ -21,10 +25,10 @@ const fs     = require("fs");
 const path   = require("path");
 const config = require("./config");
 const { fetchOraclePrice }      = require("./oracle");
-const { verifyOracleSignature } = require("./verifier");
 const { adjudicate }            = require("./adjudicator");
 const { executeSlash }          = require("./slasher");
 const { executeSettlement }     = require("./settlement");
+const { verifyDeterministic, logHardBreach } = require("./deterministicVerifier");
 
 // ---------------------------------------------------------------------------
 // CLI args
@@ -126,40 +130,66 @@ async function runCycle(cycleNumber) {
     return record;
   }
 
-  // ── 2. Verify signature ───────────────────────────────────────────────────
+  // ── 2. Tier 1 — deterministic verifier ────────────────────────────────────
+  // Everything mechanically checkable (signature, freshness, schema, and —
+  // if REGISTRY_ADDRESS is set — attestation currency) is decided here, with
+  // no LLM in the loop. Only responses that pass every mechanical check ever
+  // reach Claude. See deterministicVerifier.js for the full rationale,
+  // including why the old "uncertain" restraint demo on the null fault is
+  // now an instant, no-LLM-call hard breach.
   const now = Math.floor(Date.now() / 1000);
   const ageSeconds = now - oracleResponse.timestamp;
-  const sigResult = verifyOracleSignature(
-    oracleResponse.value,
-    oracleResponse.timestamp,
-    config.ORACLE_WALLET_ADDRESS,
-    oracleResponse.signature
-  );
+  const detResult = await verifyDeterministic({ response: oracleResponse, ageSeconds });
+  const sigResult = detResult.sigResult;
 
   console.log(`  Age: ${color(`${ageSeconds}s`, ageSeconds > 30 ? RED : GREEN)}  ` +
     `SigValid: ${color(String(sigResult.valid), sigResult.valid ? GREEN : RED)}` +
     (sigResult.error ? `  (${sigResult.error})` : ""));
 
-  // ── 3. LLM adjudication ──────────────────────────────────────────────────
-  console.log(`  ${DIM}Adjudicating via ${config.MODEL}...${RESET}`);
   let verdict;
-  try {
-    verdict = await adjudicate({
-      response:      oracleResponse,
-      sigValid:      sigResult.valid,
-      sigError:      sigResult.error,
-      sigRecovered:  sigResult.recovered,
-      ageSeconds,
-      cycleNumber,
-    });
-  } catch (err) {
-    console.log(`  ${color("Adjudication failed:", RED)} ${err.message}`);
-    record = { ...record, error: err.message, verdict: "uncertain", reason: `LLM call failed: ${err.message}` };
-    logCycle(record);
-    return record;
-  }
 
-  printVerdict(verdict);
+  if (detResult.verdict === "hard_breach") {
+    // ── Tier 1 short-circuit — no Claude call at all ────────────────────────
+    console.log(`\n  ${RED}${BOLD}🛑 TIER 1 HARD BREACH — ${detResult.code}${RESET}`);
+    console.log(`  ${DIM}${detResult.reason}${RESET}`);
+    console.log(`  ${DIM}(mechanically determined — no LLM call in this trace)${RESET}`);
+
+    const serviceId = oracleResponse.signature || `${oracleResponse.value}:${oracleResponse.timestamp}`;
+    logHardBreach({ serviceId, code: detResult.code, reason: detResult.reason, checks: detResult.checks, cycleNumber });
+
+    verdict = {
+      verdict:      "breach",
+      reason:       detResult.reason,
+      should_slash: true,
+      checks: {
+        timestamp_fresh: detResult.checks.timestamp_fresh,
+        value_present:   detResult.checks.schema_valid,
+        signature_valid: detResult.checks.signature_valid,
+      },
+      tier: "deterministic",
+      code: detResult.code,
+    };
+  } else {
+    // ── Tier 2 — LLM semantic adjudication ─────────────────────────────────
+    console.log(`  ${DIM}Adjudicating via ${config.MODEL}...${RESET}`);
+    try {
+      verdict = await adjudicate({
+        response:      oracleResponse,
+        sigValid:      sigResult.valid,
+        sigError:      sigResult.error,
+        sigRecovered:  sigResult.recovered,
+        ageSeconds,
+        cycleNumber,
+      });
+      verdict.tier = "semantic";
+    } catch (err) {
+      console.log(`  ${color("Adjudication failed:", RED)} ${err.message}`);
+      record = { ...record, error: err.message, verdict: "uncertain", reason: `LLM call failed: ${err.message}` };
+      logCycle(record);
+      return record;
+    }
+    printVerdict(verdict);
+  }
 
   // ── 4. Act on verdict: slash on breach, settle payment on clean ──────────
   let slashResult = null;
@@ -216,6 +246,8 @@ async function runCycle(cycleNumber) {
     should_slash:    verdict.should_slash,
     reason:          verdict.reason,
     checks:          verdict.checks,
+    tier:            verdict.tier ?? "semantic",
+    deterministic_code: verdict.code ?? null,
     slash_tx:        slashResult?.txHash ?? null,
     slash_simulated: slashResult?.simulated ?? false,
     settlement_tx:         settlementResult?.txHash ?? null,
