@@ -269,14 +269,43 @@ consumer/src/adjudicator.js             Phase 2: prompt forbids citing signature
                                          cites a Tier 1 ground anyway — same "gate it, don't just prompt it"
                                          pattern as paymentGate.js
 consumer/src/slashGate.js               Phase 3: gateSlash() — payee, target (agent === response.oracle ===
-                                         config), breach-classification (partial — no formula until Phase 4;
-                                         ArcIDBond.slash() has no amount/breachClass param yet), and verdict-hash
-                                         binding, called by slasher.js before DEV_MODE branch. Own log channel:
+                                         config), breach-classification, and verdict-hash binding, called by
+                                         slasher.js before DEV_MODE branch. Own log channel:
                                          slash_failures.jsonl (stage: "slash-gate"); rejections also write a
-                                         "gated" line to settlement_audit.jsonl via auditTrail.js
+                                         "gated" line to settlement_audit.jsonl via auditTrail.js. NOTE: as of
+                                         Phase 4, ArcIDBond.slash() now DOES compute amount from a real
+                                         on-chain formula — slashGate.js's own docstring still describes this
+                                         as a Phase-4 dependency and has not yet been updated to reflect that
+                                         Phase 4 has since shipped (cosmetic doc lag, not a functional gap;
+                                         gateSlash()'s own checks are unaffected either way)
 consumer/src/serviceId.js               serviceIdFor() extracted out of settlement.js so slashGate.js uses the
                                          identical "which interaction is this" definition, not a second copy
 ```
+
+Proportional breach-class slashing files (post-submission, tiered-adjudication doc,
+Phase 4 — see CHANGELOG.md):
+```
+contracts/ArcIDBond.sol                 BreachClass enum (Semantic/Hard), owner-tunable schedule config,
+                                         BondInfo.amount now means REMAINING balance (decrements on partial
+                                         slashes), _computeSlashAmount()/previewSlash() shared formula, never-
+                                         zero floor, fixed-24h-window epoch escalation, permanent bond-contract
+                                         blacklist (NOT a registry write — CLAUDE.md forbids touching the
+                                         identity layer) on escalation. New events: BreachClassified,
+                                         AgentEscalatedAndBlacklisted. AgentSlashed signature unchanged.
+contracts/interfaces/IArcIDBondSlash.sol  Now the canonical home of the BreachClass enum; ArcIDBond formally
+                                         `is IArcIDBondSlash` so the compiler enforces the two never drift
+contracts/ConsumerSessionKeyGuard.sol   guardedSlash() gained a breachClass passthrough param (contract-layer,
+                                         required to compile against the new slash() — in scope for Phase 4
+                                         even though off-chain wiring is Phase 5's job)
+test/ArcIDBondSlashClasses.test.js      25 new tests — the full plan reviewed and approved before this was written
+```
+
+**⚠ Known temporary breakage (see CHANGELOG.md's Phase 4 entry for the full explanation):**
+`slash()`'s new required `breachClass` parameter breaks every off-chain caller still on the
+old 3-arg signature — `consumer/src/slasher.js`, `oracle/src/chain.js`'s `triggerCycle()`,
+and `scripts/cli/slash.js`. Deliberately left unfixed — choosing which `breachClass` to pass
+based on adjudication tier is tiered-adjudication Phase 5's explicit job. Do not "fix" these
+piecemeal before Phase 5 lands; the real fix is that phase's wiring, not a patch here.
 
 ---
 
@@ -288,14 +317,16 @@ These events are the source of truth for the frontend live counters.
 | Event | Fields | Frontend use |
 |-------|--------|-------------|
 | `BondPosted(agent, amount, token)` | agent wallet, USDC amount (6 dec), token addr | TVL counter, agent card badge |
-| `AgentSlashed(agent, consumer, amount, reason)` | all parties, amount, LLM rationale | Slash counter, badge flip, rationale display |
+| `AgentSlashed(agent, consumer, amount, reason)` | all parties, amount, LLM rationale | Slash counter, badge flip, rationale display. Signature unchanged by Phase 4 (tiered-adjudication, post-submission) — `amount` is now the proportional/capped amount that specific call transferred, not always the full bond |
+| `BreachClassified(agent, breachClass, amount, epochBreachCount, escalated)` | class, amount, rolling-24h count, escalation flag | Post-submission Phase 4 (see CHANGELOG.md) — richer companion to `AgentSlashed` |
+| `AgentEscalatedAndBlacklisted(agent, amountTaken, breachClass)` | fires only on full-drain escalation | Post-submission Phase 4 — "this agent is now permanently done" signal |
 | `PaymentSettled(agent, consumer, amount, verdictHash)` | all parties, amount, off-chain verdict hash | Post-submission (see CHANGELOG.md) — "no breach" counterpart to `AgentSlashed`; does not move funds |
 | `BondWithdrawn(agent, amount)` | agent, amount | TVL update |
 | `SlasherUpdated(old, new)` | wallet addrs | Admin audit |
 
 ---
 
-## Test Suite (79 passing — run with `npm test`)
+## Test Suite (104 passing — run with `npm test`)
 
 ```
 test/ArcIDBond.test.js
@@ -305,6 +336,9 @@ test/ArcIDBond.test.js
   slash                   7   USDC transfer to consumer, mark slashed, AgentSlashed event
                               with rationale, NotAuthorizedSlasher, NoBondFound,
                               AlreadySlashed, isActiveBondedAgent after slash
+                              (this file forces escalation threshold=1 so "one call = full
+                              bond, slashed=true" stays valid post-Phase-4 — see
+                              ArcIDBondSlashClasses.test.js for the proportional math itself)
   recordSettlement        7   PaymentSettled event, no funds moved, NotAuthorizedSlasher,
                               NoBondFound, AlreadySlashed, AlreadySettled, mutually
                               exclusive with slash() (post-submission — see CHANGELOG.md)
@@ -327,6 +361,24 @@ ConsumerSessionKeyGuard (post-submission, Phase 6 — see CHANGELOG.md)  [test/C
                                NotSessionKey, SessionExpired, session key has no direct bond authority
   guardedRecordSettlement 6   within cap, event, AmountExceedsCap, cap boundary, NotSessionKey,
                                AlreadySlashed mutual exclusion holds through the guard
+
+ArcIDBond — proportional breach-class slashing (post-submission, tiered-adjudication
+Phase 4 — see CHANGELOG.md)  [test/ArcIDBondSlashClasses.test.js]
+  cap boundaries — semantic   3   bondCap binds, k*fee binds, exact tie boundary — real
+                                  numbers ($5 bond, $0.001 fee) pulled from testnet, not assumed
+  cap boundaries — hard       2   10% of bond independent of fee, hard cap >= semantic cap
+  cap boundaries — general    2   never-zero floor on dust bonds, never exceeds capBps share
+  epoch escalation            7   independent hard/semantic counters, 24h rollover reset,
+                                  no escalation below threshold, full-drain at threshold,
+                                  drains REMAINING not original bond, blacklist blocks
+                                  postBond(), positive case: non-escalated depletion allows re-bond
+  can't-exceed-cap invariant  4   slash() ABI has no amount param, previewSlash() matches
+                                  actual transfer, guard's maxAmountPerCall never bounded slash
+                                  (only ever applied to recordSettlement), parametrized sweep
+                                  across 5 bond sizes x both classes
+  events                      3   BreachClassified fields, AgentEscalatedAndBlacklisted only
+                                  on escalation, not emitted otherwise
+  admin setters               4   InvalidBps, InvalidThreshold, events, non-owner reverts
 ```
 
 **Run tests:** `npm test` (no external RPC, no .env required — uses Hardhat in-memory network)
@@ -424,9 +476,12 @@ the test that proves the moat. It must always pass. Do not weaken the assertion.
 ## Critical Invariants
 
 - `postBond()` MUST revert for any wallet where `registry.agentIdBySigner(wallet) == bytes32(0)`. This is the moat. Never bypass or mock away this check except in `MockRegistry`-based unit tests.
+- `postBond()` MUST revert for any blacklisted wallet (post-submission Phase 4 — see CHANGELOG.md). Blacklisting is bond-contract-local only; it never writes to `ArcIDRegistryV2`.
 - `slash()` MUST only be callable by `authorizedSlasher`. No consumer can slash without authorization.
 - `slash()` on an already-slashed agent MUST revert. No double-slash.
-- Bond amount MUST be transferred to contract on `postBond`, to consumer on `slash`, back to agent on `withdraw`. No funds stuck in contract.
+- `slash()` MUST compute its amount internally from on-chain config/state only (post-submission Phase 4). No caller — not even `ConsumerSessionKeyGuard` — may supply or influence the transferred amount. `slash()`'s ABI has no `amount` parameter; this is enforced structurally, not just by convention.
+- A single `slash()` call below its breach class's rolling-24h escalation threshold MUST NOT transfer more than that class's `capBps` share of the *remaining* bond. Only an escalating call (threshold crossed) may take the full remainder — and doing so MUST also permanently blacklist the agent.
+- Bond amount MUST be transferred to contract on `postBond`, to consumer on `slash` (now the internally-computed proportional or full-drain amount, not always the full bond), back to agent on `withdraw` (whatever currently remains). No funds stuck in contract.
 
 ---
 

@@ -15,6 +15,12 @@ const { ethers }  = require("hardhat");
 const parseUSYC = (n) => ethers.parseUnits(String(n), 8); // 8-decimal
 const parseUSDC = (n) => ethers.parseUnits(String(n), 6); // 6-decimal
 
+// BreachClass enum (Phase 4 — tiered adjudication, post-submission). These
+// tests are about USYC yield mechanics, not proportional-slashing math, so
+// escalation threshold is forced to 1 below — one slash() call still fully
+// drains the bond, preserving "consumer receives the full amount" assertions.
+const BREACH_HARD = 1;
+
 describe("ArcIDBond — USYC yield-bearing collateral (Phase 5)", function () {
 
   let bond, mockUSYC, mockRegistry;
@@ -45,6 +51,7 @@ describe("ArcIDBond — USYC yield-bearing collateral (Phase 5)", function () {
     await mockUSYC.connect(agent).approve(await bond.getAddress(), BOND_AMOUNT);
 
     await bond.setAuthorizedSlasher(slasher.address);
+    await bond.setEscalationThresholds(1, 1);
   });
 
   // ---------------------------------------------------------------------------
@@ -149,7 +156,8 @@ describe("ArcIDBond — USYC yield-bearing collateral (Phase 5)", function () {
       await bond.connect(slasher).slash(
         agent.address,
         consumer.address,
-        "SLA breach — oracle served data 3× past the 30s freshness SLA"
+        "SLA breach — oracle served data 3× past the 30s freshness SLA",
+        BREACH_HARD
       );
 
       expect(await mockUSYC.balanceOf(consumer.address)).to.equal(BOND_AMOUNT);
@@ -162,7 +170,8 @@ describe("ArcIDBond — USYC yield-bearing collateral (Phase 5)", function () {
       await bond.connect(slasher).slash(
         agent.address,
         consumer.address,
-        "bad-sig: oracle signature does not recover to registered wallet"
+        "bad-sig: oracle signature does not recover to registered wallet",
+        BREACH_HARD
       );
 
       const consumerUSYC     = await mockUSYC.balanceOf(consumer.address);
@@ -174,17 +183,23 @@ describe("ArcIDBond — USYC yield-bearing collateral (Phase 5)", function () {
       expect(consumerUsdcValue).to.equal(parseUSDC("5.10"));
     });
 
-    it("slashed agent has zero active bond; can re-bond after slash", async () => {
+    it("slashed agent has zero active bond; blacklisted after an escalated slash", async () => {
+      // Phase 4 behavior change: with this file's forced threshold=1, a
+      // single slash() escalates — full drain AND permanent blacklist, so
+      // re-bonding is no longer possible afterward (see ArcIDBond.test.js's
+      // analogous test for the same change, and ArcIDBondSlashClasses.test.js
+      // for the positive re-bond-after-non-escalated-depletion case).
       await bond.connect(agent).postBond(BOND_AMOUNT);
-      await bond.connect(slasher).slash(agent.address, consumer.address, "breach");
+      await bond.connect(slasher).slash(agent.address, consumer.address, "breach", BREACH_HARD);
 
       expect(await bond.isActiveBondedAgent(agent.address)).to.be.false;
+      expect(await bond.blacklisted(agent.address)).to.be.true;
 
-      // Agent can re-bond after losing their collateral
       await mockUSYC.mint(agent.address, BOND_AMOUNT);
       await mockUSYC.connect(agent).approve(await bond.getAddress(), BOND_AMOUNT);
-      await bond.connect(agent).postBond(BOND_AMOUNT);
-      expect(await bond.isActiveBondedAgent(agent.address)).to.be.true;
+      await expect(
+        bond.connect(agent).postBond(BOND_AMOUNT)
+      ).to.be.revertedWithCustomError(bond, "AgentBlacklisted");
     });
 
   });

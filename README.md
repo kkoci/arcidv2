@@ -13,12 +13,20 @@ Addresses Lepton's **Prior Art #8** (bonded agent reputation) and **RFB 3** (age
 > breaker, an attributable audit trail for every settlement attempt, a
 > deterministic Tier-1 verifier ahead of LLM slash adjudication, a narrowed
 > Tier-2 adjudicator jurisdiction (with deterministic enforcement, not just
-> a prompt instruction), and a mirrored deterministic gate in front of
-> `slash()` itself were all added afterward, during the (extended, ongoing)
-> event window — judges track commit activity through the end of the
-> event, and no winner date had been announced at the time. See
-> [CHANGELOG.md](CHANGELOG.md) for the full
+> a prompt instruction), a mirrored deterministic gate in front of
+> `slash()` itself, and proportional breach-class slashing with epoch
+> escalation (replacing full-bond-per-incident) were all added afterward,
+> during the (extended, ongoing) event window — judges track commit
+> activity through the end of the event, and no winner date had been
+> announced at the time. See [CHANGELOG.md](CHANGELOG.md) for the full
 > breakdown, commit-by-commit.
+>
+> **⚠ `slash()`'s signature changed** (gained a required `breachClass`
+> parameter) as part of this work. The consumer agent's live slash path,
+> the oracle's `/admin/trigger-cycle` demo, and `npm run bond:slash` are
+> currently non-functional against a contract built from this signature —
+> intentionally left that way pending the next phase's wiring, not an
+> oversight. See CHANGELOG.md's Phase 4 entry for the full list.
 
 ---
 
@@ -439,8 +447,9 @@ slash flow already meets.
 | Post-submission | `consumer/src/deterministicVerifier.js` — Tier 1 of tiered slash adjudication; mechanically-checkable breaches skip the LLM entirely | ✅ Complete → [CHANGELOG.md](CHANGELOG.md) |
 | Post-submission | Narrowed Tier 2 adjudicator — Claude's jurisdiction restricted to semantic quality, structured `evidence` schema, deterministic `assertWithinJurisdiction()` enforcement | ✅ Complete → [CHANGELOG.md](CHANGELOG.md) |
 | Post-submission | `consumer/src/slashGate.js` — deterministic payee/target/classification/verdict-hash gate in front of `slash()`, mirroring `paymentGate.js` | ✅ Complete → [CHANGELOG.md](CHANGELOG.md) |
+| Post-submission | Proportional breach-class slashing + epoch escalation in `ArcIDBond.sol`; 25 new tests. **⚠ Breaks consumer/oracle/CLI slash callers until Phase 5 wires the new signature** | ✅ Contract complete, wiring pending → [CHANGELOG.md](CHANGELOG.md) |
 
-**Test suite:** 79 passing (`npm test`) — no external RPC, no `.env` required.
+**Test suite:** 104 passing (`npm test`) — no external RPC, no `.env` required.
 
 ---
 
@@ -461,7 +470,7 @@ The Circle-specific moat: **`ArcIDBond.sol` already supports any ERC-20** — th
 | `scripts/mint_usyc.js` | Mint USYC from USDC via Teller on Arc testnet |
 | `frontend/src/components/USYCBondCard.jsx` | Purple "yield-bearing" card with narrative + deployed contract address |
 
-**Test suite highlights (`npm test` — 79 passing total):**
+**Test suite highlights (`npm test` — 104 passing total):**
 
 ```
 USYC bond face value is $5.00 USDC at deposit time (sharePrice = $1.00)
@@ -793,22 +802,29 @@ constructor(address _collateralToken, address _registry)
 
 | Function | Who | Description |
 |----------|-----|-------------|
-| `postBond(uint256 amount)` | TEE-verified agent | Transfers collateral to contract. Reverts for unverified wallets. |
-| `slash(address agent, address consumer, string reason)` | authorizedSlasher | Transfers bond to consumer. `reason` is the LLM rationale. |
+| `postBond(uint256 amount)` | TEE-verified agent | Transfers collateral to contract. Reverts for unverified wallets or a blacklisted agent (see Phase 4). |
+| `slash(address agent, address consumer, string reason, BreachClass breachClass)` | authorizedSlasher | Post-submission Phase 4 (see [CHANGELOG.md](CHANGELOG.md)): `breachClass` is `Semantic` (0) or `Hard` (1) — no `amount` parameter exists; the contract computes it internally (capped, proportional to the remaining bond) and escalates to a full-drain + permanent blacklist past a per-class rolling-24h threshold. `reason` is the LLM (or Tier 1 machine-generated) rationale. |
+| `previewSlash(address agent, BreachClass breachClass)` | view | Post-submission Phase 4. Returns `(amount, wouldEscalate)` without executing — the same internal formula `slash()` uses, independently checkable. |
 | `recordSettlement(address agent, address consumer, uint256 amount, bytes32 verdictHash)` | authorizedSlasher | Post-submission (see [CHANGELOG.md](CHANGELOG.md)). Does NOT move funds — logs an off-chain Gateway settlement against a clean verdict. Reverts if the bond is already slashed. |
-| `withdrawBond()` | Bond holder | Returns unslashed bond to agent. |
+| `withdrawBond()` | Bond holder | Returns unslashed bond to agent — whatever currently *remains*, post Phase 4, not necessarily the original deposit. |
 | `isActiveBondedAgent(address)` | view | True if agent has active (unslashed) bond. |
 | `setAuthorizedSlasher(address)` | owner | Rotate the consumer agent wallet. |
+| `setSlashParameters(uint256 k, uint256 semanticCapBps, uint256 hardCapBps)` | owner | Post-submission Phase 4. Retune the slash-amount schedule. |
+| `setServiceFee(uint256 serviceFeeAtomic)` | owner | Post-submission Phase 4. Retune the fee basis used in the semantic-tier `k × fee` term. |
+| `setEscalationThresholds(uint16 hard, uint16 semantic)` | owner | Post-submission Phase 4. Retune breaches-per-24h-epoch before full-drain escalation. |
 
 #### Events
 
 | Event | When |
 |-------|------|
 | `BondPosted(agent, amount, token)` | Successful `postBond()` |
-| `AgentSlashed(agent, consumer, amount, reason)` | Successful `slash()` |
+| `AgentSlashed(agent, consumer, amount, reason)` | Successful `slash()` — signature unchanged since before Phase 4; `amount` is now whatever that call actually transferred (proportional or full), not always the full bond |
+| `BreachClassified(agent, breachClass, amount, epochBreachCount, escalated)` | Successful `slash()` — post-submission Phase 4 (see [CHANGELOG.md](CHANGELOG.md)) |
+| `AgentEscalatedAndBlacklisted(agent, amountTaken, breachClass)` | Only on the escalation path — post-submission Phase 4 |
 | `PaymentSettled(agent, consumer, amount, verdictHash)` | Successful `recordSettlement()` — post-submission (see [CHANGELOG.md](CHANGELOG.md)) |
 | `BondWithdrawn(agent, amount)` | Successful `withdrawBond()` |
 | `SlasherUpdated(oldSlasher, newSlasher)` | `setAuthorizedSlasher()` called |
+| `SlashParametersUpdated` / `ServiceFeeUpdated` / `EscalationThresholdsUpdated` | Respective admin setters called — post-submission Phase 4 |
 
 ### `ConsumerSessionKeyGuard.sol` — post-submission (see [CHANGELOG.md](CHANGELOG.md))
 
@@ -835,7 +851,7 @@ model this contract does not cover.
 |----------|-----|-------------|
 | `grantSessionKey(address sessionKey, address payoutAddress, uint256 maxAmountPerCall, uint64 expiresInSeconds)` | owner | Grants (or overwrites) the active session. `payoutAddress` is fixed on-chain — the session key can never redirect proceeds. |
 | `revokeSessionKey()` | owner | Immediately kills the active session (e.g. on suspected leak). |
-| `guardedSlash(address agent, string reason)` | sessionKey | Calls `ArcIDBond.slash(agent, payoutAddress, reason)`. Reverts if expired or unauthorized. |
+| `guardedSlash(address agent, string reason, BreachClass breachClass)` | sessionKey | Calls `ArcIDBond.slash(agent, payoutAddress, reason, breachClass)`. `breachClass` param added post-submission Phase 4 (see [CHANGELOG.md](CHANGELOG.md)) — passed through unmodified; the guard never supplies or influences the amount, before or after Phase 4. Reverts if expired or unauthorized. |
 | `guardedRecordSettlement(address agent, uint256 amount, bytes32 verdictHash)` | sessionKey | Calls `ArcIDBond.recordSettlement(agent, payoutAddress, amount, verdictHash)`. Reverts `AmountExceedsCap` over the cap. |
 | `hasActiveSession()` | view | True if a session key is set and not expired. |
 

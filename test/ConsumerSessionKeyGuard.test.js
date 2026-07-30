@@ -17,6 +17,13 @@ const FAKE_AGENT_ID = ethers.keccak256(ethers.toUtf8Bytes("fake-agent"));
 const VERDICT_HASH  = ethers.keccak256(ethers.toUtf8Bytes("verdict:ok"));
 const ONE_HOUR = 3600;
 
+// BreachClass enum (Phase 4 — tiered adjudication, post-submission). These
+// tests are about session-key guard mechanics, not proportional-slashing
+// math, so escalation threshold is forced to 1 below — one guardedSlash()
+// call still fully drains the bond, preserving this file's original
+// "one call, full bond" assertions.
+const BREACH_HARD = 1;
+
 describe("ConsumerSessionKeyGuard", function () {
   let bond, usdc, registry, guard;
   let owner, verifiedAgent, unverifiedAgent, payout, sessionKey, otherKey;
@@ -44,6 +51,7 @@ describe("ConsumerSessionKeyGuard", function () {
     // Move slasher authority from the deployer EOA to the guard contract —
     // this is the step that actually takes an unbounded key out of the loop.
     await bond.setAuthorizedSlasher(await guard.getAddress());
+    await bond.setEscalationThresholds(1, 1);
   });
 
   // ---------------------------------------------------------------------------
@@ -123,7 +131,7 @@ describe("ConsumerSessionKeyGuard", function () {
     it("a revoked session key can no longer call guardedSlash", async function () {
       await guard.revokeSessionKey();
       await expect(
-        guard.connect(sessionKey).guardedSlash(verifiedAgent.address, "breach")
+        guard.connect(sessionKey).guardedSlash(verifiedAgent.address, "breach", BREACH_HARD)
       ).to.be.revertedWithCustomError(guard, "NoActiveSession");
     });
   });
@@ -139,28 +147,28 @@ describe("ConsumerSessionKeyGuard", function () {
 
     it("transfers the bond to the fixed payoutAddress, not an attacker-chosen one", async function () {
       const before = await usdc.balanceOf(payout.address);
-      await guard.connect(sessionKey).guardedSlash(verifiedAgent.address, "stale data");
+      await guard.connect(sessionKey).guardedSlash(verifiedAgent.address, "stale data", BREACH_HARD);
       const after = await usdc.balanceOf(payout.address);
       expect(after - before).to.equal(FIVE_USDC);
     });
 
     it("emits GuardedSlash", async function () {
-      await expect(guard.connect(sessionKey).guardedSlash(verifiedAgent.address, "stale data"))
+      await expect(guard.connect(sessionKey).guardedSlash(verifiedAgent.address, "stale data", BREACH_HARD))
         .to.emit(guard, "GuardedSlash")
-        .withArgs(verifiedAgent.address, sessionKey.address, "stale data");
+        .withArgs(verifiedAgent.address, sessionKey.address, "stale data", BREACH_HARD);
     });
 
     it("marks the underlying bond as slashed", async function () {
-      await guard.connect(sessionKey).guardedSlash(verifiedAgent.address, "stale data");
+      await guard.connect(sessionKey).guardedSlash(verifiedAgent.address, "stale data", BREACH_HARD);
       expect(await bond.isActiveBondedAgent(verifiedAgent.address)).to.be.false;
     });
 
     it("reverts NotSessionKey if called by any other address, including the guard owner", async function () {
       await expect(
-        guard.connect(owner).guardedSlash(verifiedAgent.address, "stale data")
+        guard.connect(owner).guardedSlash(verifiedAgent.address, "stale data", BREACH_HARD)
       ).to.be.revertedWithCustomError(guard, "NotSessionKey");
       await expect(
-        guard.connect(otherKey).guardedSlash(verifiedAgent.address, "stale data")
+        guard.connect(otherKey).guardedSlash(verifiedAgent.address, "stale data", BREACH_HARD)
       ).to.be.revertedWithCustomError(guard, "NotSessionKey");
     });
 
@@ -168,13 +176,13 @@ describe("ConsumerSessionKeyGuard", function () {
       await ethers.provider.send("evm_increaseTime", [ONE_HOUR + 1]);
       await ethers.provider.send("evm_mine");
       await expect(
-        guard.connect(sessionKey).guardedSlash(verifiedAgent.address, "stale data")
+        guard.connect(sessionKey).guardedSlash(verifiedAgent.address, "stale data", BREACH_HARD)
       ).to.be.revertedWithCustomError(guard, "SessionExpired");
     });
 
     it("the session key has no direct authority on ArcIDBond — only the guard does", async function () {
       await expect(
-        bond.connect(sessionKey).slash(verifiedAgent.address, payout.address, "stale data")
+        bond.connect(sessionKey).slash(verifiedAgent.address, payout.address, "stale data", BREACH_HARD)
       ).to.be.revertedWithCustomError(bond, "NotAuthorizedSlasher");
     });
   });
@@ -223,7 +231,7 @@ describe("ConsumerSessionKeyGuard", function () {
     });
 
     it("still respects ArcIDBond's own AlreadySlashed guard (mutual exclusion holds through the guard too)", async function () {
-      await guard.connect(sessionKey).guardedSlash(verifiedAgent.address, "breach");
+      await guard.connect(sessionKey).guardedSlash(verifiedAgent.address, "breach", BREACH_HARD);
       await expect(
         guard.connect(sessionKey).guardedRecordSettlement(verifiedAgent.address, HALF_USDC, VERDICT_HASH)
       ).to.be.revertedWithCustomError(bond, "AlreadySlashed");

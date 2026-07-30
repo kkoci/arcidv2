@@ -14,6 +14,14 @@ const FIVE_USDC   = 5_000_000n;   // 5 USDC (6 decimals)
 const ONE_USDC    = 1_000_000n;
 const FAKE_AGENT_ID = ethers.keccak256(ethers.toUtf8Bytes("fake-agent"));
 
+// BreachClass enum (Phase 4 — tiered adjudication). These generic mechanics
+// tests aren't about the proportional-slashing math itself (that's
+// ArcIDBondSlashClasses.test.js) — escalation thresholds are set to 1 below
+// so a single slash() call still fully drains the bond, preserving these
+// tests' original "one call, full bond, slashed=true" assertions unchanged.
+const BREACH_SEMANTIC = 0;
+const BREACH_HARD     = 1;
+
 describe("ArcIDBond", function () {
   let bond, usdc, registry;
   let owner, verifiedAgent, unverifiedAgent, consumer, otherSlasher;
@@ -44,6 +52,11 @@ describe("ArcIDBond", function () {
 
     // Fund consumer for withdraw tests
     await usdc.mint(consumer.address, 100_000_000n);
+
+    // Force one-call full-drain escalation so pre-Phase-4 tests' "one
+    // slash() = full bond, marked slashed" assertions stay valid — the
+    // proportional/gradual-escalation math itself is covered separately.
+    await bond.setEscalationThresholds(1, 1);
   });
 
   // ---------------------------------------------------------------------------
@@ -106,18 +119,25 @@ describe("ArcIDBond", function () {
       ).to.be.revertedWithCustomError(bond, "BondAlreadyActive");
     });
 
-    it("allows re-bonding after a slash", async function () {
+    it("reverts re-bonding after an escalated slash (agent is blacklisted)", async function () {
+      // Phase 4 behavior change from the pre-tiering contract: a slash that
+      // crosses the escalation threshold (this file forces threshold=1, see
+      // top beforeEach) both fully drains AND permanently blacklists the
+      // agent — re-bonding is no longer possible afterward. The positive
+      // case (re-bonding IS allowed after a bond is fully depleted via
+      // partial, non-escalated slashes, with no blacklist) is covered in
+      // ArcIDBondSlashClasses.test.js, where escalation can be avoided.
       await bond.connect(verifiedAgent).postBond(FIVE_USDC);
 
-      // Slash
-      await bond.slash(verifiedAgent.address, consumer.address, "stale data");
+      await bond.slash(verifiedAgent.address, consumer.address, "stale data", BREACH_HARD);
+      expect(await bond.blacklisted(verifiedAgent.address)).to.be.true;
 
-      // Re-fund and re-approve
       await usdc.mint(verifiedAgent.address, FIVE_USDC);
       await usdc.connect(verifiedAgent).approve(await bond.getAddress(), FIVE_USDC);
 
-      // Should succeed
-      await expect(bond.connect(verifiedAgent).postBond(FIVE_USDC)).to.not.be.reverted;
+      await expect(
+        bond.connect(verifiedAgent).postBond(FIVE_USDC)
+      ).to.be.revertedWithCustomError(bond, "AgentBlacklisted");
     });
   });
 
@@ -132,45 +152,45 @@ describe("ArcIDBond", function () {
 
     it("transfers the full bond to the consumer", async function () {
       const before = await usdc.balanceOf(consumer.address);
-      await bond.slash(verifiedAgent.address, consumer.address, "stale data");
+      await bond.slash(verifiedAgent.address, consumer.address, "stale data", BREACH_HARD);
       const after  = await usdc.balanceOf(consumer.address);
       expect(after - before).to.equal(FIVE_USDC);
     });
 
     it("marks the bond as slashed", async function () {
-      await bond.slash(verifiedAgent.address, consumer.address, "stale data");
+      await bond.slash(verifiedAgent.address, consumer.address, "stale data", BREACH_HARD);
       const b = await bond.bonds(verifiedAgent.address);
       expect(b.slashed).to.be.true;
     });
 
     it("emits AgentSlashed with the LLM rationale string", async function () {
       const reason = "timestamp 47s stale vs 30s SLA — provider live but serving stale data";
-      await expect(bond.slash(verifiedAgent.address, consumer.address, reason))
+      await expect(bond.slash(verifiedAgent.address, consumer.address, reason, BREACH_HARD))
         .to.emit(bond, "AgentSlashed")
         .withArgs(verifiedAgent.address, consumer.address, FIVE_USDC, reason);
     });
 
     it("reverts if caller is not the authorized slasher", async function () {
       await expect(
-        bond.connect(otherSlasher).slash(verifiedAgent.address, consumer.address, "breach")
+        bond.connect(otherSlasher).slash(verifiedAgent.address, consumer.address, "breach", BREACH_HARD)
       ).to.be.revertedWithCustomError(bond, "NotAuthorizedSlasher");
     });
 
     it("reverts with NoBondFound for an unknown agent", async function () {
       await expect(
-        bond.slash(unverifiedAgent.address, consumer.address, "breach")
+        bond.slash(unverifiedAgent.address, consumer.address, "breach", BREACH_HARD)
       ).to.be.revertedWithCustomError(bond, "NoBondFound");
     });
 
     it("reverts with AlreadySlashed on double-slash", async function () {
-      await bond.slash(verifiedAgent.address, consumer.address, "breach");
+      await bond.slash(verifiedAgent.address, consumer.address, "breach", BREACH_HARD);
       await expect(
-        bond.slash(verifiedAgent.address, consumer.address, "breach again")
+        bond.slash(verifiedAgent.address, consumer.address, "breach again", BREACH_HARD)
       ).to.be.revertedWithCustomError(bond, "AlreadySlashed");
     });
 
     it("isActiveBondedAgent returns false after slash", async function () {
-      await bond.slash(verifiedAgent.address, consumer.address, "breach");
+      await bond.slash(verifiedAgent.address, consumer.address, "breach", BREACH_HARD);
       expect(await bond.isActiveBondedAgent(verifiedAgent.address)).to.be.false;
     });
   });
@@ -214,7 +234,7 @@ describe("ArcIDBond", function () {
     });
 
     it("reverts with AlreadySlashed if the agent's bond was already slashed", async function () {
-      await bond.slash(verifiedAgent.address, consumer.address, "breach");
+      await bond.slash(verifiedAgent.address, consumer.address, "breach", BREACH_HARD);
       await expect(
         bond.recordSettlement(verifiedAgent.address, consumer.address, ONE_USDC, VERDICT_HASH)
       ).to.be.revertedWithCustomError(bond, "AlreadySlashed");
@@ -230,7 +250,7 @@ describe("ArcIDBond", function () {
     it("cannot be called for an agent after slash() has consumed the same verdictHash's bond", async function () {
       // Mutual exclusivity check: once slashed, no settlement can be logged
       // for that agent's bond, regardless of verdictHash.
-      await bond.slash(verifiedAgent.address, consumer.address, "breach");
+      await bond.slash(verifiedAgent.address, consumer.address, "breach", BREACH_HARD);
       const otherHash = ethers.keccak256(ethers.toUtf8Bytes("verdict:ok:2"));
       await expect(
         bond.recordSettlement(verifiedAgent.address, consumer.address, ONE_USDC, otherHash)
@@ -273,7 +293,7 @@ describe("ArcIDBond", function () {
     });
 
     it("reverts with AlreadySlashed if the bond was slashed", async function () {
-      await bond.slash(verifiedAgent.address, consumer.address, "breach");
+      await bond.slash(verifiedAgent.address, consumer.address, "breach", BREACH_HARD);
       await expect(
         bond.connect(verifiedAgent).withdrawBond()
       ).to.be.revertedWithCustomError(bond, "AlreadySlashed");
@@ -328,11 +348,11 @@ describe("ArcIDBond", function () {
       await bond.setAuthorizedSlasher(otherSlasher.address);
 
       await expect(
-        bond.slash(verifiedAgent.address, consumer.address, "breach")
+        bond.slash(verifiedAgent.address, consumer.address, "breach", BREACH_HARD)
       ).to.be.revertedWithCustomError(bond, "NotAuthorizedSlasher");
 
       await expect(
-        bond.connect(otherSlasher).slash(verifiedAgent.address, consumer.address, "breach")
+        bond.connect(otherSlasher).slash(verifiedAgent.address, consumer.address, "breach", BREACH_HARD)
       ).to.not.be.reverted;
     });
   });

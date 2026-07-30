@@ -50,7 +50,7 @@ contract ConsumerSessionKeyGuard is Ownable {
         uint64  expiry
     );
     event SessionKeyRevoked(address indexed sessionKey);
-    event GuardedSlash(address indexed agent, address indexed sessionKey, string reason);
+    event GuardedSlash(address indexed agent, address indexed sessionKey, string reason, IArcIDBondSlash.BreachClass breachClass);
     event GuardedSettlement(address indexed agent, address indexed sessionKey, uint256 amount, bytes32 verdictHash);
 
     error NotSessionKey();
@@ -97,9 +97,17 @@ contract ConsumerSessionKeyGuard is Ownable {
 
     /// @notice Slash via the guard. `consumer` is always `payoutAddress` —
     ///         the session key cannot redirect proceeds anywhere else.
-    function guardedSlash(address agent, string calldata reason) external onlySessionKey {
-        bond.slash(agent, payoutAddress, reason);
-        emit GuardedSlash(agent, msg.sender, reason);
+    ///         `breachClass` (tiered-adjudication Phase 4 — see CHANGELOG.md)
+    ///         is passed through unmodified; ArcIDBond computes the actual
+    ///         slash amount internally from it — this guard never supplies
+    ///         or influences an amount, same as before Phase 4.
+    function guardedSlash(
+        address agent,
+        string calldata reason,
+        IArcIDBondSlash.BreachClass breachClass
+    ) external onlySessionKey {
+        bond.slash(agent, payoutAddress, reason, breachClass);
+        emit GuardedSlash(agent, msg.sender, reason, breachClass);
     }
 
     /// @notice Record a settlement via the guard. Amount capped, payout fixed.
