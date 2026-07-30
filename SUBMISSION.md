@@ -46,6 +46,20 @@ Show the revert: `"Agent not TEE-verified in ArcID registry"`
 
 ### Beat 3 — The agency beat: LLM adjudication (0:40–1:15, 35 seconds)
 
+> **⚠ Needs a rewrite before recording (post-submission — see [CHANGELOG.md](CHANGELOG.md)):**
+> the stale-fault portion below no longer happens as written. Tiered
+> adjudication (Phase 1–2 of the tiered-adjudication doc) means `stale`
+> (and `null`, `bad-sig`) are now mechanically-checkable Tier 1 hard
+> breaches — Claude is never called for them, so there is no "timestamp
+> fresh=false... it explains why" moment to show. The healthy-cycle opening
+> (Claude says OK, restrained) is still accurate — healthy responses still
+> reach Tier 2 unchanged. Rebuild the fault half of this beat once Phase 5
+> of the tiered-adjudication doc ships `npm run demo:hard-breach` /
+> `demo:semantic-breach` — that phase's own stated goal is "the absence of
+> an LLM call in the trace is itself the demo," which is a stronger beat
+> than what's scripted below. Left unrewritten until then rather than
+> patched against commands that don't exist yet.
+
 **Screen:** Consumer terminal — two cycles side by side
 
 First, run a healthy cycle (terminal output):
@@ -283,6 +297,7 @@ Consumer cycles logged:      [N] JSONL lines in consumer/logs/
 - [ ] Dashboard loads: `cd frontend && npm run dev` → http://localhost:5174
 - [ ] Fault injection works: Dashboard → "stale" → consumer detects breach within ~12s
 - [ ] Settlement works: healthy cycle → consumer settles on-chain (`✓ SETTLED`); standalone check via `npm run bond:settle`
+- [ ] Beat 3's fault half is rewritten (currently flagged ⚠, not deleted) once tiered-adjudication Phase 5 ships `demo:hard-breach` / `demo:semantic-breach` — do not record Beat 3 as currently written, it narrates behavior that no longer happens
 - [ ] GitHub repo is public
 - [ ] Video recorded and uploaded
 - [ ] Form submitted at https://forms.gle/SMqLaw2pMGDe58LFA

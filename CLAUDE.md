@@ -262,6 +262,12 @@ consumer/src/deterministicVerifier.js   verifyDeterministic() — Tier 1: signat
                                          Own log channel: deterministic_breaches.jsonl
 consumer/src/index.js                   Runs verifyDeterministic() before adjudicate(); Tier 2 (Claude) only
                                          ever sees responses that already passed every Tier 1 check
+consumer/src/adjudicator.js             Phase 2: prompt forbids citing signature/timestamp/schema grounds
+                                         (not just omits them); deliver_verdict schema replaces checks{} with
+                                         breach_class + structured evidence[] (claim+category, not free prose);
+                                         assertWithinJurisdiction() deterministically rejects any verdict that
+                                         cites a Tier 1 ground anyway — same "gate it, don't just prompt it"
+                                         pattern as paymentGate.js
 ```
 
 ---

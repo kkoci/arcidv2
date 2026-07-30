@@ -93,12 +93,18 @@ function printVerdict(verdict) {
     verdict.verdict === "ok"        ? color("✓ OK",        GREEN)  :
     verdict.verdict === "breach"    ? color("✗ BREACH",    RED)    :
                                       color("? UNCERTAIN", YELLOW);
-  console.log(`\n  Verdict: ${BOLD}${icon}${RESET}`);
+  console.log(`\n  Verdict: ${BOLD}${icon}${RESET}  ${DIM}(tier: ${verdict.tier ?? "semantic"})${RESET}`);
   console.log(`  ${DIM}${verdict.reason}${RESET}`);
   if (verdict.checks) {
     const c = verdict.checks;
-    const fmt = (b) => b ? color("✓", GREEN) : color("✗", RED);
-    console.log(`  Checks: timestamp_fresh=${fmt(c.timestamp_fresh)}  value_present=${fmt(c.value_present)}  signature_valid=${fmt(c.signature_valid)}`);
+    const fmt = (b) => b === null || b === undefined ? color("–", DIM) : b ? color("✓", GREEN) : color("✗", RED);
+    console.log(`  Tier 1 checks: signature_valid=${fmt(c.signature_valid)}  timestamp_fresh=${fmt(c.timestamp_fresh)}  schema_valid=${fmt(c.schema_valid)}  attestation_current=${fmt(c.attestation_current)}`);
+  }
+  if (verdict.evidence && verdict.evidence.length > 0) {
+    console.log(`  Evidence (${verdict.breach_class ?? "semantic"}):`);
+    for (const e of verdict.evidence) {
+      console.log(`    ${DIM}[${e.category}]${RESET} ${e.claim}`);
+    }
   }
 }
 
@@ -161,30 +167,23 @@ async function runCycle(cycleNumber) {
       verdict:      "breach",
       reason:       detResult.reason,
       should_slash: true,
-      checks: {
-        timestamp_fresh: detResult.checks.timestamp_fresh,
-        value_present:   detResult.checks.schema_valid,
-        signature_valid: detResult.checks.signature_valid,
-      },
-      tier: "deterministic",
-      code: detResult.code,
+      checks:       detResult.checks,
+      tier:         "deterministic",
+      code:         detResult.code,
     };
   } else {
     // ── Tier 2 — LLM semantic adjudication ─────────────────────────────────
+    // Claude only ever sees responses that already passed every Tier 1
+    // check, so it never re-derives (or restates) signature/timestamp/
+    // schema results — those are Tier 1's, merged in below.
     console.log(`  ${DIM}Adjudicating via ${config.MODEL}...${RESET}`);
     try {
-      verdict = await adjudicate({
-        response:      oracleResponse,
-        sigValid:      sigResult.valid,
-        sigError:      sigResult.error,
-        sigRecovered:  sigResult.recovered,
-        ageSeconds,
-        cycleNumber,
-      });
-      verdict.tier = "semantic";
+      verdict = await adjudicate({ response: oracleResponse, ageSeconds, cycleNumber });
+      verdict.tier   = "semantic";
+      verdict.checks = detResult.checks;
     } catch (err) {
       console.log(`  ${color("Adjudication failed:", RED)} ${err.message}`);
-      record = { ...record, error: err.message, verdict: "uncertain", reason: `LLM call failed: ${err.message}` };
+      record = { ...record, error: err.message, verdict: "uncertain", reason: `Adjudication error: ${err.message}` };
       logCycle(record);
       return record;
     }
@@ -248,6 +247,8 @@ async function runCycle(cycleNumber) {
     checks:          verdict.checks,
     tier:            verdict.tier ?? "semantic",
     deterministic_code: verdict.code ?? null,
+    breach_class:    verdict.breach_class ?? null,
+    evidence:        verdict.evidence ?? null,
     slash_tx:        slashResult?.txHash ?? null,
     slash_simulated: slashResult?.simulated ?? false,
     settlement_tx:         settlementResult?.txHash ?? null,

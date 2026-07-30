@@ -10,11 +10,13 @@ Addresses Lepton's **Prior Art #8** (bonded agent reputation) and **RFB 3** (age
 > execution on a clean verdict (real Circle Gateway settlement +
 > `ArcIDBond.recordSettlement()`), session-key wallet hardening, a
 > deterministic anti-injection payment gate, a spend-velocity circuit
-> breaker, an attributable audit trail for every settlement attempt, and a
-> deterministic Tier-1 verifier ahead of LLM slash adjudication were all
-> added afterward, during the (extended, ongoing) event window — judges
-> track commit activity through the end of the event, and no winner date had
-> been announced at the time. See [CHANGELOG.md](CHANGELOG.md) for the full
+> breaker, an attributable audit trail for every settlement attempt, a
+> deterministic Tier-1 verifier ahead of LLM slash adjudication, and a
+> narrowed Tier-2 adjudicator jurisdiction (with deterministic enforcement,
+> not just a prompt instruction) were all added afterward, during the
+> (extended, ongoing) event window — judges track commit activity through
+> the end of the event, and no winner date had been announced at the time.
+> See [CHANGELOG.md](CHANGELOG.md) for the full
 > breakdown, commit-by-commit.
 
 ---
@@ -434,6 +436,7 @@ slash flow already meets.
 | Post-submission | Spend-velocity circuit breaker — rolling 1m/1h settlement spend caps, manual-only resume | ✅ Complete → [CHANGELOG.md](CHANGELOG.md) |
 | Post-submission | `consumer/src/auditTrail.js` — attributable audit record (agentId, payee, verdict hash, amount, tx hash) for every settlement attempt | ✅ Complete → [CHANGELOG.md](CHANGELOG.md) |
 | Post-submission | `consumer/src/deterministicVerifier.js` — Tier 1 of tiered slash adjudication; mechanically-checkable breaches skip the LLM entirely | ✅ Complete → [CHANGELOG.md](CHANGELOG.md) |
+| Post-submission | Narrowed Tier 2 adjudicator — Claude's jurisdiction restricted to semantic quality, structured `evidence` schema, deterministic `assertWithinJurisdiction()` enforcement | ✅ Complete → [CHANGELOG.md](CHANGELOG.md) |
 
 **Test suite:** 79 passing (`npm test`) — no external RPC, no `.env` required.
 
@@ -548,6 +551,16 @@ An autonomous loop that pays for oracle data, verifies it, and lets Claude reaso
 | `bad-sig` | 0s | ✗ | ✓ | **breach** — "Non-canonical s value is a deterministic signing failure, not a network blip. Authorship cannot be proven." | Yes |
 
 The `uncertain` verdict on `null` demonstrates **adjudicator restraint** — the agent correctly refuses to slash on ambiguous failures. This is explicitly part of the agency story.
+
+> **Superseded by tiered adjudication (post-submission — see [CHANGELOG.md](CHANGELOG.md)):**
+> this table is the original Phase 3 demo record, left as-is per this doc's own
+> transparency principle of not rewriting pre-deadline results. It no longer
+> describes current behavior: `stale`, `null`, and `bad-sig` are all
+> mechanically-checkable and now hard-breach at Tier 1 with **zero LLM calls**
+> — Claude never sees them. The `uncertain`-on-`null` restraint moment above
+> was real and is preserved as a record of what was demoed, but is not
+> reproducible on the current code path; see `deterministicVerifier.js`'s
+> module doc for why that's an intentional redesign, not a regression.
 
 **Run locally (oracle must be running first):**
 
