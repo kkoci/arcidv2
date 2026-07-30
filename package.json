@@ -30,6 +30,8 @@
     "bond:transfer-ownership": "node scripts/cli/transfer-ownership.js",
     "session:grant":      "node scripts/cli/session-key.js --action grant",
     "session:revoke":     "node scripts/cli/session-key.js --action revoke",
+    "dispute:list":       "node scripts/cli/dispute-list.js",
+    "dispute:resolve":    "node scripts/cli/dispute-resolve.js",
     "gating:check":       "node scripts/cli/gating-check.js",
     "node":               "hardhat node"
   },

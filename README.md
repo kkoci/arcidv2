@@ -209,23 +209,36 @@ bond status for each address. Read-only. Add `--from-block <n>` if the RPC limit
 ### Trigger a slash (demo / testing)
 
 ```bash
+SLASHER_PRIVATE_KEY=... in .env (never a CLI argument — see CLAUDE.md's private-key rule), then:
 npm run bond:slash -- \
-  --key <slasher-private-key> \
   --agent <agent-address> \
   --consumer <consumer-address> \
-  --reason "Stale data: response was 90s past the 30s SLA window"
+  --reason "Stale data: response was 90s past the 30s SLA window" \
+  --breach-class hard \
+  [--network arcTestnet]
 ```
 
-Caller must be the `authorizedSlasher` on `ArcIDBond`. The `--reason` string goes
-on-chain verbatim in the `AgentSlashed` event, same as the consumer agent's LLM rationale.
+Caller must be the `authorizedSlasher` on `ArcIDBond`. `--breach-class` is
+required (`hard` or `semantic`, no default — post-submission tiered-
+adjudication, see [CHANGELOG.md](CHANGELOG.md)); the contract computes the
+transferred amount internally from it — this command never supplies or
+influences an amount. The `--reason` string goes on-chain verbatim in the
+`AgentSlashed` event, same as the consumer agent's LLM rationale. Before
+sending, it previews the actual amount via `previewSlash()` — the same
+formula `slash()` itself uses — so the on-chain result is never a surprise.
 
 ```
 → Slashing agent 0x71bE...abc on arcTestnet
-  Bond amount: 5.00 USDC
-  Reason:      "Stale data: response was 90s past the 30s SLA window"
+  ArcIDBond:    0x5E5e...4691d
+  Caller:       0xA662...0085
+  Consumer:     0xF3a9...12c
+  BreachClass:  hard (1)
+  Reason:       "Stale data: response was 90s past the 30s SLA window"
+  Bond remaining: 5.00 USDC
+  Preview:        0.50 USDC
 
 ✓ slash() mined → 0xabc999...
-  5.00 USDC transferred to consumer 0xF3a9...12c
+  0.50 USDC transferred to consumer 0xF3a9...12c
 ```
 
 ### Record a settlement (demo / testing)
@@ -257,6 +270,35 @@ against an agent that was already paid out via slash.
 ✓ recordSettlement() mined → 0x1304d8e4...
   0.001000 USDC settlement logged for agent 0x71bE...abc
 ```
+
+### List / resolve disputes (post-submission — see CHANGELOG.md)
+
+```bash
+npm run dispute:list [-- --network arcTestnet] [-- --all]
+```
+
+Read-only, no private key required. Loops `disputes(1..nextDisputeId)` directly
+(no event pagination needed — it's a simple counter). Shows open (`Indicted`)
+disputes by default; `--all` also shows resolved ones. For each dispute, tries
+to find the original Claude rationale + evidence in the consumer agent's own
+`consumer/logs/*.jsonl` (matched by `dispute_id`) — the on-chain record only
+ever stores `rationaleHash`, never the full text.
+
+```bash
+DEPLOYER_PRIVATE_KEY=... in .env, then:
+npm run dispute:resolve -- --id <disputeId> --approve|--reject [--network arcTestnet]
+```
+
+`DEPLOYER_PRIVATE_KEY` (the contract's `owner` — see CLAUDE.md's private-key
+rule: never a CLI argument). Prints the full stored dispute state, the
+off-chain rationale + evidence if found locally, and — on `--approve` — a live
+`previewSlash()` of what would actually transfer (which may differ from the
+`claimAmount` captured at indictment time, and may be `0` if the agent's bond
+was independently slashed in the meantime — see `_executeSlashOrVoid()`),
+**before** asking for interactive confirmation. Only a typed `"yes"` proceeds;
+anything else aborts with no on-chain action. No `--yes`/`--force` flag to skip
+the prompt, deliberately — the tool exists so a human looks at the evidence
+first, not to rubber-stamp a disputeId.
 
 ### Deploy + grant a session-key guard (post-submission — see CHANGELOG.md)
 
@@ -457,6 +499,8 @@ slash flow already meets.
 | Post-submission | Proportional breach-class slashing + epoch escalation in `ArcIDBond.sol`; 25 new tests | ✅ Complete → [CHANGELOG.md](CHANGELOG.md) |
 | Post-submission | `breachClass` wiring (slasher.js, oracle trigger-cycle, CLI) + `demo:hard-breach`/`demo:semantic-breach`; new `bad-price` oracle fault mode; live-verified against the redeployed contract | ✅ Complete → [CHANGELOG.md](CHANGELOG.md) |
 | Post-submission | Phase 6.1: optimistic challenge window in `ArcIDBond.sol` — large semantic slashes held pending dispute (owner-only interim resolver, stated as a placeholder — see Future Work) instead of executing instantly; auto-finalizes if unresolved; 27 new tests | ✅ Complete → [CHANGELOG.md](CHANGELOG.md) |
+| Post-submission | Phase 6.2: `slashGate.js` routes large semantic slashes to `fileIndictment()` instead of `slash()`, decided by a live on-chain read mirroring the contract's own rule; live-verified against a local redeploy of Phase 6.1's bytecode (the shared Arc testnet contract still predates 6.1 — redeploy is 6.4's job) | ✅ Complete → [CHANGELOG.md](CHANGELOG.md) |
+| Post-submission | Phase 6.3: `dispute:list` / `dispute:resolve` CLI — interim owner review tooling that surfaces the off-chain Claude rationale before an interactive approve/reject confirmation | ✅ Complete → [CHANGELOG.md](CHANGELOG.md) |
 
 **Test suite:** 131 passing (`npm test`) — no external RPC, no `.env` required.
 

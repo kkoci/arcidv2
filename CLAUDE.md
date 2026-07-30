@@ -440,6 +440,36 @@ Phase 6.4's scope, not done here — until then, `demo:semantic-breach`
 live contract, by design (the gate fails loud on the routing RPC read
 rather than guessing), while `demo:hard-breach` is unaffected.
 
+Optimistic challenge window — owner resolution CLI (post-submission, arcid2
+Phase 6, Phase 6.3 — see CHANGELOG.md):
+```
+scripts/cli/dispute-list.js             npm run dispute:list — read-only, no key. Loops
+                                         disputes(1..nextDisputeId) directly (simple counter + public
+                                         mapping getter, no event pagination needed). Open (Indicted)
+                                         by default; --all also shows Resolved. Flags deadline-passed
+                                         disputes as eligible for finalizeExpiredDispute().
+scripts/cli/dispute-resolve.js          npm run dispute:resolve -- --id <id> --approve|--reject —
+                                         DEPLOYER_PRIVATE_KEY-gated (owner; never a CLI arg). Previews
+                                         previewSlash() before approving (may be 0 -> gracefully voids,
+                                         not a revert — see ArcIDBond.sol's _executeSlashOrVoid()).
+                                         Requires a typed "yes" — no --yes/--force skip flag,
+                                         deliberately: the tool exists so a human reviews the evidence.
+scripts/cli/_disputeLookup.js           Shared by both — scans consumer/logs/*.jsonl for the record
+                                         matching a disputeId (tagged there by slasher.js since Phase
+                                         6.2) to surface the full Claude rationale + evidence; on-chain
+                                         only ever has rationaleHash. Best-effort local lookup — both
+                                         scripts print an explicit "not found locally" notice rather
+                                         than silently proceeding if it's missing.
+```
+Live-verified against a fresh local Hardhat deployment of Phase 6.1's
+bytecode (same reasoning as 6.2 — the live Arc testnet contract still
+predates 6.1). Filed two real indictments, one with a matching local log
+record and one without, to exercise both the found and not-found paths;
+confirmed dispute:list renders both correctly, dispute:resolve's approve
+path (real previewSlash() + real resolveDispute() tx, confirmed on-chain),
+reject path (bond confirmed untouched), the abort-on-non-"yes" path, and
+the already-resolved refusal path all work exactly as designed.
+
 ---
 
 ## ArcIDBond Contract Events
