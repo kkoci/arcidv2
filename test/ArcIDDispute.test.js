@@ -274,7 +274,7 @@ describe("ArcIDBond — optimistic challenge window (Phase 6)", function () {
         .withArgs(agentA.address, consumer.address, expectedAmount, "[DISPUTE APPROVED] see rationaleHash on IndictmentFiled event");
     });
 
-    it("reverts AlreadySlashed and leaves the dispute stuck Indicted if the bond was fully drained in the meantime (documented limitation)", async function () {
+    it("gracefully voids (does not revert) an approval against an agent already fully slashed by an unrelated escalation", async function () {
       const id = await fileOne();
       // Escalate the agent to full-drain + blacklist via 3 Hard breaches, independent of the pending dispute.
       for (let i = 0; i < 3; i++) {
@@ -282,9 +282,61 @@ describe("ArcIDBond — optimistic challenge window (Phase 6)", function () {
       }
       expect((await bond.bonds(agentA.address)).slashed).to.equal(true);
 
-      await expect(bond.resolveDispute(id, true)).to.be.revertedWithCustomError(bond, "AlreadySlashed");
-      // The revert must have rolled back the `state = Resolved` write too — still Indicted.
-      expect((await bond.disputes(id)).state).to.equal(DISPUTE_INDICTED);
+      const before = await usdc.balanceOf(consumer.address);
+      // Must NOT revert: approved=true records the intent, amountTransferred=0 records
+      // that there was nothing left to take — a genuine void, not a stuck dispute.
+      await expect(bond.resolveDispute(id, true))
+        .to.emit(bond, "DisputeResolved")
+        .withArgs(id, true, 0n, false);
+      const after = await usdc.balanceOf(consumer.address);
+      expect(after).to.equal(before); // this specific call moved nothing
+
+      // The defining proof this isn't just "didn't crash": the dispute is actually
+      // closed out (Resolved), not left dangling in Indicted forever.
+      expect((await bond.disputes(id)).state).to.equal(DISPUTE_RESOLVED);
+    });
+
+    it("explicit rejection also still succeeds and voids the dispute cleanly against an already-slashed agent", async function () {
+      const id = await fileOne();
+      for (let i = 0; i < 3; i++) {
+        await bond.slash(agentA.address, consumer.address, `h${i}`, BREACH_HARD);
+      }
+      expect((await bond.bonds(agentA.address)).slashed).to.equal(true);
+
+      // Rejection never calls the slash-execution path at all, so it was and remains
+      // unaffected by the already-slashed state — succeeds exactly as it would for
+      // a perfectly healthy bond.
+      await expect(bond.resolveDispute(id, false))
+        .to.emit(bond, "DisputeResolved")
+        .withArgs(id, false, 0n, false);
+      expect((await bond.disputes(id)).state).to.equal(DISPUTE_RESOLVED);
+    });
+
+    it("finalizeExpiredDispute() gracefully voids (does not revert) once the deadline passes against an already-slashed agent — the case that actually mattered", async function () {
+      const id = await fileOne();
+      // Agent gets hard-slashed to full-drain WHILE this semantic dispute is pending.
+      for (let i = 0; i < 3; i++) {
+        await bond.slash(agentA.address, consumer.address, `h${i}`, BREACH_HARD);
+      }
+      expect((await bond.bonds(agentA.address)).slashed).to.equal(true);
+
+      await ethers.provider.send("evm_increaseTime", [24 * 3600 + 1]);
+      await ethers.provider.send("evm_mine");
+
+      const before = await usdc.balanceOf(consumer.address);
+      // This is the path that matters most: it's permissionless, so a revert here
+      // would strand the dispute forever with no one obligated to clean it up.
+      // Must resolve cleanly instead — not revert, not stay stuck.
+      await expect(bond.finalizeExpiredDispute(id))
+        .to.emit(bond, "DisputeResolved")
+        .withArgs(id, true, 0n, true);
+      const after = await usdc.balanceOf(consumer.address);
+      expect(after).to.equal(before); // nothing transferred by this call — genuinely voided, not silently succeeding by accident
+
+      // Proves "voided, not stuck": the dispute is actually closed out.
+      expect((await bond.disputes(id)).state).to.equal(DISPUTE_RESOLVED);
+      // And proves it's truly closed, not re-openable: a second call must not re-fire.
+      await expect(bond.finalizeExpiredDispute(id)).to.be.revertedWithCustomError(bond, "DisputeNotIndicted");
     });
   });
 

@@ -456,9 +456,9 @@ slash flow already meets.
 | Post-submission | `consumer/src/slashGate.js` — deterministic payee/target/classification/verdict-hash gate in front of `slash()`, mirroring `paymentGate.js` | ✅ Complete → [CHANGELOG.md](CHANGELOG.md) |
 | Post-submission | Proportional breach-class slashing + epoch escalation in `ArcIDBond.sol`; 25 new tests | ✅ Complete → [CHANGELOG.md](CHANGELOG.md) |
 | Post-submission | `breachClass` wiring (slasher.js, oracle trigger-cycle, CLI) + `demo:hard-breach`/`demo:semantic-breach`; new `bad-price` oracle fault mode; live-verified against the redeployed contract | ✅ Complete → [CHANGELOG.md](CHANGELOG.md) |
-| Post-submission | Phase 6.1: optimistic challenge window in `ArcIDBond.sol` — large semantic slashes held pending dispute (owner-only interim resolver, stated as a placeholder — see Future Work) instead of executing instantly; auto-finalizes if unresolved; 25 new tests | ✅ Complete → [CHANGELOG.md](CHANGELOG.md) |
+| Post-submission | Phase 6.1: optimistic challenge window in `ArcIDBond.sol` — large semantic slashes held pending dispute (owner-only interim resolver, stated as a placeholder — see Future Work) instead of executing instantly; auto-finalizes if unresolved; 27 new tests | ✅ Complete → [CHANGELOG.md](CHANGELOG.md) |
 
-**Test suite:** 129 passing (`npm test`) — no external RPC, no `.env` required.
+**Test suite:** 131 passing (`npm test`) — no external RPC, no `.env` required.
 
 ---
 

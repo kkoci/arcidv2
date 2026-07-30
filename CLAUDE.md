@@ -365,12 +365,27 @@ contracts/ArcIDBond.sol                 DisputeState enum, Dispute struct, chall
                                          placeholder, not the end state), finalizeExpiredDispute()
                                          (permissionless, the actual "optimistic" default-execute path),
                                          setChallengeParameters(). New events: IndictmentFiled,
-                                         DisputeResolved, ChallengeParametersUpdated.
-test/ArcIDDispute.test.js               25 new tests — the mutually-exclusive slash()/fileIndictment()
+                                         DisputeResolved, ChallengeParametersUpdated. New internal
+                                         _executeSlashOrVoid() — used ONLY by resolveDispute()/
+                                         finalizeExpiredDispute(), never slash() — returns 0 without
+                                         reverting if the agent was already fully slashed by an unrelated
+                                         event, so a moot claim closes the dispute cleanly instead of
+                                         reverting and stranding it Indicted forever on the permissionless
+                                         finalize path. Still-open, narrower gap left deliberately unfixed:
+                                         voluntary withdrawBond() (postedAt->0, not slashed=true) while a
+                                         dispute is pending still reverts NoBondFound on approval.
+test/ArcIDDispute.test.js               27 tests — the mutually-exclusive slash()/fileIndictment()
                                          partition, escalation always bypassing the gate, fresh-recompute-
                                          at-resolution (proven via an intervening Hard breach shrinking the
-                                         bond between indictment and resolution), and the documented
-                                         AlreadySlashed-stuck-dispute edge case
+                                         bond between indictment and resolution), and the closed stuck-
+                                         dispute gap: agent hard-slashed to full-drain while a dispute is
+                                         pending, then finalizeExpiredDispute() called after the window
+                                         passes — asserted against the real failure mode (no revert,
+                                         consumer balance unchanged by that call, dispute reads back
+                                         Resolved not stuck Indicted, a second call reverts
+                                         DisputeNotIndicted proving it's truly closed), not just "didn't
+                                         crash". Mirrored for resolveDispute(id, true) directly; rejection
+                                         confirmed unaffected either way.
 ```
 Extended `ArcIDBond.sol` directly rather than a companion `ArcIDDispute.sol`
 — the dispute path needs `_computeSlashAmount()`, `bonds`/`breachEpochs`/
@@ -402,7 +417,7 @@ These events are the source of truth for the frontend live counters.
 
 ---
 
-## Test Suite (129 passing — run with `npm test`)
+## Test Suite (131 passing — run with `npm test`)
 
 ```
 test/ArcIDBond.test.js
@@ -464,11 +479,17 @@ ArcIDBond — optimistic challenge window (post-submission, arcid2 Phase 6.1
                                    ChallengeThresholdNotExceeded, EscalatingBreachNotDisputable,
                                    NoBondFound, AlreadySlashed, disputeId increments, does NOT
                                    mutate breachEpochs at indictment time
-  resolveDispute()            7   owner approval executes + transfers, owner rejection leaves
+  resolveDispute()            9   owner approval executes + transfers, owner rejection leaves
                                    bond untouched, non-owner revert, unknown/already-resolved
                                    disputeId, fresh recompute at resolution (not the stored
-                                   claimAmount), AlreadySlashed leaves dispute stuck Indicted
-                                   (documented limitation, not silently wrong)
+                                   claimAmount); the drained-bond race: approval against an
+                                   already-slashed agent gracefully voids (does NOT revert —
+                                   _executeSlashOrVoid(), amountTransferred=0, dispute reads
+                                   back Resolved not stuck), explicit rejection confirmed
+                                   unaffected either way, finalizeExpiredDispute() proven to
+                                   gracefully void the identical case (not just "doesn't
+                                   crash" — balance unchanged, state=Resolved, and a second
+                                   call reverts DisputeNotIndicted, proving it's truly closed)
   finalizeExpiredDispute()    3   ChallengeWindowNotExpired before deadline, permissionless
                                    auto-execute after deadline, DisputeNotIndicted if already resolved
   admin setChallengeParameters 3  updates + event, InvalidDisputeWindow on zero, non-owner revert
@@ -577,6 +598,7 @@ the test that proves the moat. It must always pass. Do not weaken the assertion.
 - Bond amount MUST be transferred to contract on `postBond`, to consumer on `slash` (now the internally-computed proportional or full-drain amount, not always the full bond), back to agent on `withdraw` (whatever currently remains). No funds stuck in contract.
 - A non-escalating Semantic breach whose computed amount exceeds `challengeThreshold` MUST NOT execute via `slash()` — it MUST revert `ChallengeThresholdExceeded` (post-submission Phase 6.1). The only paths to move funds for such a breach are `resolveDispute()` (owner-approved) or `finalizeExpiredDispute()` (deadline passed, unresolved). Hard breaches and any escalating breach are NEVER subject to this gate, at any size — enforced on-chain, not just by off-chain convention.
 - `resolveDispute()`/`finalizeExpiredDispute()` MUST recompute the slash amount fresh via `_computeSlashAmount()` at resolution time — never trust the `claimAmount` stored at indictment time. A bond-state change between indictment and resolution must be reflected in what actually transfers.
+- `finalizeExpiredDispute()` (permissionless) MUST NOT revert when the underlying agent was already fully slashed by an unrelated event before it's called — it MUST close the dispute out (`state = Resolved`, `DisputeResolved(id, true, 0, true)`) instead. Being permissionless is exactly why a revert here is unacceptable: there would be no one obligated to notice and clean it up. `resolveDispute(id, true)` MUST behave identically for the same reason. `resolveDispute(id, false)` (explicit rejection) is unaffected either way — it never touches the slash-execution path.
 
 ---
 

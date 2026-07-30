@@ -476,6 +476,35 @@ contract ArcIDBond is Ownable, ReentrancyGuard, IArcIDBondSlash {
         emit BreachClassified(agent, breachClass, amount, newCount, escalated);
     }
 
+    /// @dev Used ONLY by resolveDispute()/finalizeExpiredDispute() — never
+    ///      by slash() itself, which must keep reverting on an invalid
+    ///      target (that's a genuine caller error on the instant path).
+    ///
+    ///      For the two dispute-resolution paths, an agent that was
+    ///      already fully slashed by an unrelated event (e.g. a Hard-breach
+    ///      escalation) between indictment and resolution is not a caller
+    ///      error — the underlying claim has simply become moot, there is
+    ///      nothing left to take. Reverting here would strand the dispute
+    ///      in Indicted state forever on the permissionless
+    ///      finalizeExpiredDispute() path, with no way to close it out
+    ///      except an owner noticing and manually rejecting. Returns 0
+    ///      without touching any state instead — the caller still marks
+    ///      the dispute Resolved either way, so this is a clean void, not
+    ///      a stuck dispute silently swept under the rug. `NoBondFound`
+    ///      (postedAt == 0 — e.g. the agent voluntarily withdrew the bond
+    ///      entirely while the dispute was pending) is a related,
+    ///      still-open gap NOT covered here — deliberately out of scope
+    ///      for this fix; still reverts, still stuck. See CHANGELOG.md.
+    function _executeSlashOrVoid(
+        address agent,
+        address consumer,
+        string memory reason,
+        BreachClass breachClass
+    ) internal returns (uint256 amount) {
+        if (bonds[agent].slashed) return 0;
+        return _executeSlash(agent, consumer, reason, breachClass);
+    }
+
     /// @dev Shared by slash() and previewSlash() so the two can never drift —
     ///      one formula, read by both the state-changing path and the
     ///      read-only preview a judge/reviewer/test would use to verify it.
@@ -662,15 +691,31 @@ contract ArcIDBond is Ownable, ReentrancyGuard, IArcIDBondSlash {
     ///         manipulated transfer. On rejection, nothing moves and the
     ///         provider's bond is untouched.
     ///
-    ///         KNOWN LIMITATION: if the agent's bond was independently
-    ///         fully slashed (e.g. by an escalation from an unrelated
-    ///         breach) between indictment and resolution, an approval here
-    ///         reverts (AlreadySlashed) and the dispute is left stuck in
-    ///         Indicted state with no way to close it out. This is a
-    ///         genuinely rare interleaving, documented rather than solved
-    ///         this phase — same "note the edge case, don't engineer it
-    ///         away at hackathon scope" pattern as the slash schedule's
-    ///         cliff behavior above.
+    ///         GRACEFUL VOID (not a revert): if the agent's bond was
+    ///         independently fully slashed (e.g. by an escalation from an
+    ///         unrelated breach) between indictment and resolution, an
+    ///         approval here does NOT revert — it executes through
+    ///         _executeSlashOrVoid(), which returns 0 without touching any
+    ///         state, and the dispute still finalizes to Resolved with
+    ///         `DisputeResolved(disputeId, true, 0, ...)`: `approved=true`
+    ///         records the intent, `amountTransferred=0` records that
+    ///         nothing was left to take. This matters most for
+    ///         finalizeExpiredDispute() below, which is permissionless —
+    ///         a revert there would strand the dispute in Indicted state
+    ///         forever with no permissionless way to close it out. An
+    ///         explicit REJECTION (resolveDispute(id, false)) never calls
+    ///         the slash-execution path at all, so it was and remains
+    ///         unaffected by any of this — it always succeeds regardless of
+    ///         the bond's state.
+    ///
+    ///         STILL-OPEN, narrower gap (deliberately not fixed here): if
+    ///         the agent voluntarily withdrew the bond entirely via
+    ///         withdrawBond() while the dispute was pending (`postedAt`
+    ///         reset to 0, not `slashed=true`), approval still reverts
+    ///         NoBondFound and the dispute can still get stuck — only an
+    ///         explicit owner rejection closes it out in that case. Left
+    ///         out of this fix deliberately, at hackathon scope; see
+    ///         CHANGELOG.md.
     ///
     /// @param disputeId Dispute to resolve.
     /// @param approved  true = execute the slash now; false = dismiss it.
@@ -682,7 +727,7 @@ contract ArcIDBond is Ownable, ReentrancyGuard, IArcIDBondSlash {
 
         uint256 amount;
         if (approved) {
-            amount = _executeSlash(
+            amount = _executeSlashOrVoid(
                 d.provider,
                 d.consumer,
                 "[DISPUTE APPROVED] see rationaleHash on IndictmentFiled event",
@@ -699,6 +744,13 @@ contract ArcIDBond is Ownable, ReentrancyGuard, IArcIDBondSlash {
     ///         indictment executes exactly as if approved. Anyone may call
     ///         this once the deadline has passed; there's no privileged
     ///         decision being made, only a deterministic deadline check.
+    ///
+    /// @dev    If the agent was already fully slashed by an unrelated event
+    ///         before this call, this does NOT revert — see the GRACEFUL
+    ///         VOID note on resolveDispute() above. Being permissionless is
+    ///         exactly why this path in particular cannot be allowed to
+    ///         revert on a moot claim: there would be no one obligated to
+    ///         notice and clean it up.
     /// @param disputeId Dispute to finalize.
     function finalizeExpiredDispute(uint256 disputeId) external nonReentrant {
         Dispute storage d = disputes[disputeId];
@@ -707,7 +759,7 @@ contract ArcIDBond is Ownable, ReentrancyGuard, IArcIDBondSlash {
 
         d.state = DisputeState.Resolved;
 
-        uint256 amount = _executeSlash(
+        uint256 amount = _executeSlashOrVoid(
             d.provider,
             d.consumer,
             "[DISPUTE AUTO-FINALIZED] see rationaleHash on IndictmentFiled event",
