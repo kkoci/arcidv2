@@ -215,7 +215,10 @@ async function runCycle(cycleNumber) {
         expectedHash,
       });
       if (slashResult.simulated) {
-        console.log(`  ${YELLOW}[DEV] Slash simulated (set DEV_MODE=false to slash on-chain)${RESET}`);
+        const label = slashResult.route === "dispute" ? "Indictment" : "Slash";
+        console.log(`  ${YELLOW}[DEV] ${label} simulated (set DEV_MODE=false to act on-chain)${RESET}`);
+      } else if (slashResult.route === "dispute" && slashResult.txHash) {
+        console.log(`  ${YELLOW}${BOLD}⚖ INDICTED — disputeId ${slashResult.disputeId} pending challenge window — tx: ${slashResult.txHash}${RESET}`);
       } else if (slashResult.txHash) {
         console.log(`  ${RED}${BOLD}✗ SLASHED — tx: ${slashResult.txHash}${RESET}`);
       }
@@ -263,6 +266,8 @@ async function runCycle(cycleNumber) {
     evidence:        verdict.evidence ?? null,
     slash_tx:        slashResult?.txHash ?? null,
     slash_simulated: slashResult?.simulated ?? false,
+    slash_route:     slashResult?.route ?? null,
+    dispute_id:      slashResult?.disputeId ?? null,
     settlement_tx:         settlementResult?.txHash ?? null,
     settlement_onchain_tx: settlementResult?.onChainTx ?? null,
     settlement_simulated:  settlementResult?.simulated ?? false,

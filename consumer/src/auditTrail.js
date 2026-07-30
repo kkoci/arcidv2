@@ -68,7 +68,14 @@ async function resolveAgentId(agentAddress) {
  * @param {string|null} [params.amount]    Atomic-unit amount (string), or null if never determined
  * @param {string|null} [params.txHash]    Gateway payment tx hash, if the payment itself went through
  * @param {string|null} [params.onChainTx] recordSettlement()/guardedRecordSettlement() tx hash, if written
- * @param {"settled"|"gated"|"circuit_breaker"|"payment_failed"|"onchain_failed"|"deduped"} params.outcome
+ * @param {"settled"|"gated"|"circuit_breaker"|"payment_failed"|"onchain_failed"|"deduped"|"indicted"|"resolved"|"auto_finalized"} params.outcome
+ *   `"indicted"` — Phase 6.2 (post-submission, see CHANGELOG.md): a large
+ *   Semantic breach was held pending dispute via fileIndictment() instead
+ *   of executing instantly. `"resolved"`/`"auto_finalized"` describe how a
+ *   pending indictment later concludes (owner resolveDispute() vs.
+ *   permissionless finalizeExpiredDispute()) — reserved in this enum now,
+ *   not yet written anywhere: the CLI/tooling that performs those actions
+ *   is Phase 6.3, not yet built.
  * @param {string} [params.reason]     Human-readable explanation
  * @param {string} params.serviceId    Ties back to the exact oracle interaction
  * @param {boolean} [params.simulated] True for DEV_MODE runs — no real funds moved

@@ -24,11 +24,26 @@
  * here from verdict.tier, the same signal deterministicVerifier.js (Phase 1)
  * and adjudicator.js (Phase 2) already attach to every verdict, so there is
  * exactly one place in the codebase that maps tier -> BreachClass.
+ *
+ * Optimistic challenge window, Phase 6.2 (post-submission — see
+ * CHANGELOG.md): gateSlash() now also returns a `route` ("instant" |
+ * "dispute"), decided by its 5th check against live on-chain state. This
+ * file just acts on whichever route the gate already decided — it does not
+ * re-derive or second-guess it — calling bond.slash() for "instant" and the
+ * new bond.fileIndictment() for "dispute". KNOWN GAP, stated rather than
+ * silently unhandled: fileIndictment() has no ConsumerSessionKeyGuard
+ * passthrough yet (guardedSlash()/guardedRecordSettlement() exist;
+ * guardedFileIndictment() does not) — if SESSION_GUARD_ADDRESS is set and
+ * routing decides "dispute", this throws a clear, explicit error rather
+ * than silently bypassing the dispute requirement (unsafe) or silently
+ * falling back to an instant slash the contract would just reject anyway.
+ * Wiring guard support is out of scope for this phase.
  */
 
 const { ethers } = require("ethers");
 const config     = require("./config");
 const { gateSlash } = require("./slashGate");
+const { writeAuditRecord } = require("./auditTrail");
 
 // BreachClass enum values — must match IArcIDBondSlash.sol exactly
 // (Semantic = 0, Hard = 1).
@@ -41,8 +56,10 @@ function breachClassFor(verdict) {
 // Human-readable ABI — ethers v6 parses these directly
 const BOND_ABI = [
   "function slash(address agent, address consumer, string calldata reason, uint8 breachClass) external",
+  "function fileIndictment(address agent, address consumer, bytes32 rationaleHash) external returns (uint256 disputeId)",
   "function isActiveBondedAgent(address agent) external view returns (bool)",
   "function bonds(address) external view returns (uint256 amount, uint64 postedAt, bool slashed)",
+  "event IndictmentFiled(uint256 indexed disputeId, address indexed agent, address indexed consumer, uint256 claimAmount, uint256 challengeDeadline, bytes32 rationaleHash)",
 ];
 
 const GUARD_ABI = [
@@ -60,7 +77,9 @@ function getGuardContract(signerOrProvider) {
 }
 
 /**
- * Execute a slash on-chain (or simulate in dev mode).
+ * Execute a slash on-chain (or simulate in dev mode). Since Phase 6.2, may
+ * instead file an indictment (held pending dispute) if the gate's routing
+ * check decided the amount crosses challengeThreshold — see slashGate.js.
  *
  * @param {object} params
  * @param {string} params.agentAddress     Oracle provider wallet to slash
@@ -72,19 +91,29 @@ function getGuardContract(signerOrProvider) {
  * @param {object} params.oracleResponse   The raw oracle response this verdict was adjudicated over
  * @param {object} params.verdict          The finalized verdict object (either tier)
  * @param {string} params.expectedHash     Verdict-hash captured at verdict-finalization time
- * @returns {Promise<{txHash: string|null, simulated: boolean}>}
+ * @returns {Promise<{txHash: string|null, simulated: boolean, route?: "instant"|"dispute", disputeId?: string|null}>}
  */
 async function executeSlash({ agentAddress, consumerAddress, reason, oracleResponse, verdict, expectedHash }) {
-  await gateSlash({ agentAddress, consumerAddress, oracleResponse, verdict, expectedHash });
+  const gateResult = await gateSlash({ agentAddress, consumerAddress, oracleResponse, verdict, expectedHash });
+  const { route, verdictHash, serviceId, previewAmount } = gateResult;
   const breachClass = breachClassFor(verdict);
 
   if (config.DEV_MODE) {
-    console.log(`  [slash] DEV_MODE — simulated slash`);
+    const label = route === "dispute" ? "indictment (challenge window)" : "slash";
+    console.log(`  [slash] DEV_MODE — simulated ${label}`);
     console.log(`  [slash] agent:    ${agentAddress}`);
     console.log(`  [slash] consumer: ${consumerAddress}`);
     console.log(`  [slash] breachClass: ${verdict.tier ?? "semantic"} (${breachClass})`);
     console.log(`  [slash] reason:   ${reason.slice(0, 120)}...`);
-    return { txHash: null, simulated: true };
+    if (route === "dispute") {
+      console.log(`  [slash] route: DISPUTE — preview amount ${previewAmount} exceeds challengeThreshold`);
+      await writeAuditRecord({
+        agent: agentAddress, payee: consumerAddress, verdictHash, serviceId,
+        amount: previewAmount?.toString() ?? null, outcome: "indicted", simulated: true,
+        reason: "DEV_MODE — indictment simulated, not filed on-chain",
+      });
+    }
+    return { txHash: null, simulated: true, route };
   }
 
   const provider = config.getProvider();
@@ -95,7 +124,35 @@ async function executeSlash({ agentAddress, consumerAddress, reason, oracleRespo
   const isActive = await bond.isActiveBondedAgent(agentAddress);
   if (!isActive) {
     console.warn(`  [slash] WARNING: agent ${agentAddress} has no active bond — skipping slash`);
-    return { txHash: null, simulated: false, skipped: true };
+    return { txHash: null, simulated: false, skipped: true, route };
+  }
+
+  if (route === "dispute") {
+    if (config.SESSION_GUARD_ADDRESS) {
+      // See module docs: no guardedFileIndictment() passthrough exists yet.
+      // Fail loud rather than silently bypass the dispute requirement or
+      // silently fall back to an instant slash the contract would reject.
+      throw new Error(
+        "fileIndictment() routing via ConsumerSessionKeyGuard is not wired yet (Phase 6.2 scope). " +
+        "Unset SESSION_GUARD_ADDRESS to use the direct-signer path for disputed slashes."
+      );
+    }
+
+    const tx      = await bond.connect(signer).fileIndictment(agentAddress, consumerAddress, verdictHash);
+    const receipt = await tx.wait();
+    const filedEvent = receipt.logs
+      .map((l) => { try { return bond.interface.parseLog(l); } catch { return null; } })
+      .find((e) => e && e.name === "IndictmentFiled");
+    const disputeId = filedEvent ? filedEvent.args.disputeId.toString() : null;
+
+    await writeAuditRecord({
+      agent: agentAddress, payee: consumerAddress, verdictHash, serviceId,
+      amount: previewAmount?.toString() ?? null, onChainTx: receipt.hash,
+      outcome: "indicted", simulated: false,
+      reason: `filed as disputeId=${disputeId} — pending challenge window`,
+    });
+
+    return { txHash: receipt.hash, simulated: false, route: "dispute", disputeId };
   }
 
   if (config.SESSION_GUARD_ADDRESS) {
@@ -104,7 +161,7 @@ async function executeSlash({ agentAddress, consumerAddress, reason, oracleRespo
     const active = await guard.hasActiveSession();
     if (!active) {
       console.warn(`  [slash] WARNING: no active session key on the guard — skipping slash`);
-      return { txHash: null, simulated: false, skipped: true };
+      return { txHash: null, simulated: false, skipped: true, route };
     }
 
     const guardPayout = await guard.payoutAddress();
@@ -118,13 +175,13 @@ async function executeSlash({ agentAddress, consumerAddress, reason, oracleRespo
 
     const tx      = await guard.guardedSlash(agentAddress, reason, breachClass);
     const receipt = await tx.wait();
-    return { txHash: receipt.hash, simulated: false };
+    return { txHash: receipt.hash, simulated: false, route: "instant" };
   }
 
   const tx      = await bond.connect(signer).slash(agentAddress, consumerAddress, reason, breachClass);
   const receipt = await tx.wait();
 
-  return { txHash: receipt.hash, simulated: false };
+  return { txHash: receipt.hash, simulated: false, route: "instant" };
 }
 
 /**

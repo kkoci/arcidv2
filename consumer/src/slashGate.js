@@ -55,6 +55,28 @@
  *      real defense the moment any async gap, retry queue, or verdict
  *      cache is introduced later — stated honestly rather than oversold.
  *
+ *   5. ROUTING (Phase 6.2, post-submission — see CHANGELOG.md) — decides
+ *      instant `slash()` vs. held-for-dispute `fileIndictment()` for a
+ *      Semantic breach, by reading the live `challengeThreshold` and
+ *      `previewSlash()` result from ArcIDBond and mirroring the contract's
+ *      own routing rule exactly: Hard breaches are always instant
+ *      regardless of size (mechanical certainty doesn't need a challenge
+ *      window — a deliberate scope limit, not an oversight); an escalating
+ *      Semantic breach is always instant regardless of size (a compounding
+ *      pattern backed by multiple already-confirmed prior breaches, not a
+ *      single fresh judgment call); a non-escalating Semantic breach whose
+ *      previewed amount exceeds `challengeThreshold` routes to dispute.
+ *      This is the ONE check of the five that makes a real network
+ *      round-trip — a deliberate, documented departure from checks 1-4's
+ *      "purely local/synchronous" property, because getting the routing
+ *      decision right on the first attempt matters (a wrong guess still
+ *      fails safely — ArcIDBond's own `slash()`/`fileIndictment()` gates
+ *      independently enforce the identical rule and simply revert on a
+ *      mismatch — but a wrong guess wastes a transaction and a demo beat).
+ *      If the RPC read itself fails, this fails the gate outright rather
+ *      than guessing a route — consistent with every other check here
+ *      refusing on anything it can't verify.
+ *
  * Rejections throw SlashGateError, are logged to their own
  * `stage: "slash-gate"` entry in slash_failures.jsonl (new — mirrors
  * settlement_failures.jsonl's per-stage shape, kept in a separate file per
@@ -70,6 +92,7 @@
 const fs     = require("fs");
 const path   = require("path");
 const crypto = require("crypto");
+const { ethers } = require("ethers");
 const config = require("./config");
 const { serviceIdFor } = require("./serviceId");
 const { writeAuditRecord } = require("./auditTrail");
@@ -77,6 +100,51 @@ const { writeAuditRecord } = require("./auditTrail");
 const FAILURE_LOG_PATH = path.join(path.resolve(config.LOG_DIR), "slash_failures.jsonl");
 
 class SlashGateError extends Error {}
+
+// Minimal ABI for check 5 (routing) only — this module has no other reason
+// to touch the chain, same "each file defines exactly the ABI subset it
+// needs" convention as deterministicVerifier.js's/auditTrail.js's own
+// REGISTRY_ABI, rather than importing slasher.js's larger BOND_ABI.
+const BOND_ROUTING_ABI = [
+  "function challengeThreshold() view returns (uint256)",
+  "function previewSlash(address agent, uint8 breachClass) view returns (uint256 amount, bool wouldEscalate)",
+];
+
+// BreachClass enum value — must match IArcIDBondSlash.sol exactly (Semantic = 0).
+const BREACH_CLASS_SEMANTIC = 0;
+
+/**
+ * Mirrors ArcIDBond's own routing rule exactly (see slash()'s
+ * ChallengeThresholdExceeded gate and fileIndictment()'s
+ * EscalatingBreachNotDisputable / ChallengeThresholdNotExceeded gates):
+ * Hard breaches and escalating Semantic breaches are always instant,
+ * regardless of size; a non-escalating Semantic breach above
+ * challengeThreshold routes to dispute. Never guesses on an RPC failure —
+ * throws instead, so the caller's gate fails loud rather than attempting a
+ * call that's likely to just revert anyway.
+ */
+async function determineRoute({ agentAddress, tier }) {
+  if (tier !== "semantic") {
+    return { route: "instant" }; // Hard breaches never disputed — see module docs
+  }
+
+  const provider = config.getProvider();
+  const bond = new ethers.Contract(config.BOND_CONTRACT_ADDRESS, BOND_ROUTING_ABI, provider);
+
+  const [challengeThreshold, previewResult] = await Promise.all([
+    bond.challengeThreshold(),
+    bond.previewSlash(agentAddress, BREACH_CLASS_SEMANTIC),
+  ]);
+  const [previewAmount, wouldEscalate] = previewResult;
+
+  if (wouldEscalate) {
+    return { route: "instant", previewAmount, wouldEscalate: true }; // escalation always instant, any size
+  }
+  if (previewAmount > challengeThreshold) {
+    return { route: "dispute", previewAmount, wouldEscalate: false };
+  }
+  return { route: "instant", previewAmount, wouldEscalate: false };
+}
 
 function logFailure(record) {
   fs.mkdirSync(path.dirname(FAILURE_LOG_PATH), { recursive: true });
@@ -109,9 +177,9 @@ function computeVerdictHash({ serviceId, verdict, tier }) {
 }
 
 /**
- * Run all four checks. Throws SlashGateError on the first failure (after
+ * Run all five checks. Throws SlashGateError on the first failure (after
  * awaiting the failure's audit-log write); returns { serviceId,
- * verdictHash } on success.
+ * verdictHash, route, previewAmount, wouldEscalate } on success.
  *
  * @param {object} params
  * @param {string} params.agentAddress     Address about to be slashed
@@ -119,7 +187,7 @@ function computeVerdictHash({ serviceId, verdict, tier }) {
  * @param {object} params.oracleResponse   The raw oracle response this verdict was adjudicated over
  * @param {object} params.verdict          The finalized verdict object (either tier)
  * @param {string} params.expectedHash     Hash captured by the caller at verdict-finalization time
- * @returns {Promise<{serviceId: string, verdictHash: string}>}
+ * @returns {Promise<{serviceId: string, verdictHash: string, route: "instant"|"dispute", previewAmount: bigint, wouldEscalate: boolean}>}
  */
 async function gateSlash({ agentAddress, consumerAddress, oracleResponse, verdict, expectedHash }) {
   const serviceId = serviceIdFor(oracleResponse);
@@ -164,7 +232,21 @@ async function gateSlash({ agentAddress, consumerAddress, oracleResponse, verdic
     await fail(`verdict hash mismatch — recomputed ${recomputedHash} vs expected ${expectedHash}; the verdict being acted on is not the one adjudicated for this interaction`);
   }
 
-  return { serviceId, verdictHash: recomputedHash };
+  // 5. ROUTING (Phase 6.2 — see module docs above)
+  let routing;
+  try {
+    routing = await determineRoute({ agentAddress, tier });
+  } catch (err) {
+    await fail(`unable to determine on-chain slash routing (challengeThreshold/previewSlash read failed): ${err.message}`);
+  }
+
+  return {
+    serviceId,
+    verdictHash:   recomputedHash,
+    route:         routing.route,
+    previewAmount: routing.previewAmount ?? null,
+    wouldEscalate: routing.wouldEscalate ?? false,
+  };
 }
 
 module.exports = { gateSlash, computeVerdictHash, SlashGateError };

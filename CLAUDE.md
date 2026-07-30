@@ -395,6 +395,51 @@ that as a second privileged cross-contract surface for no real benefit.
 Off-chain wiring (`slashGate.js`), CLI dispute-resolution tooling, and
 live-verified demo commands are later phases of the same doc, not yet built.
 
+Optimistic challenge window — consumer wiring (post-submission, arcid2
+Phase 6, Phase 6.2 — see CHANGELOG.md):
+```
+consumer/src/slashGate.js               New 5th check — ROUTING. Reads live challengeThreshold()/
+                                         previewSlash() from ArcIDBond and mirrors the contract's own
+                                         routing rule (Hard always instant; escalating Semantic always
+                                         instant; non-escalating Semantic above threshold routes to
+                                         dispute). Deliberate departure from checks 1-4's "no network
+                                         round-trip" property — documented, not silent. gateSlash() now
+                                         returns { route, previewAmount, wouldEscalate } alongside the
+                                         existing { serviceId, verdictHash }. Fails the gate outright
+                                         (does not guess) if the routing RPC read itself fails.
+consumer/src/slasher.js                 executeSlash() acts on gateSlash()'s route — unchanged bond.slash()/
+                                         guard.guardedSlash() for "instant"; new bond.fileIndictment(agent,
+                                         consumer, verdictHash) for "dispute" (reuses the existing
+                                         verdictHash as rationaleHash, no second hash invented). Writes an
+                                         "indicted" audit record on every successful indictment (DEV_MODE
+                                         and real). KNOWN GAP: no guardedFileIndictment() on
+                                         ConsumerSessionKeyGuard yet — throws a clear, explicit error if
+                                         SESSION_GUARD_ADDRESS is set and routing decides "dispute", rather
+                                         than silently bypassing the dispute requirement or falling back to
+                                         an instant slash the contract would reject anyway.
+consumer/src/auditTrail.js              Outcome vocabulary gains "indicted" (written this phase) and
+                                         "resolved"/"auto_finalized" (reserved, not yet written anywhere —
+                                         Phase 6.3's CLI tooling is what will write those).
+consumer/src/index.js                   Console output distinguishes "⚖ INDICTED — disputeId N pending
+                                         challenge window" from "✗ SLASHED"; cycle log record gains
+                                         slash_route / dispute_id fields.
+```
+Live-verified against a LOCAL Hardhat deployment of Phase 6.1's actual
+bytecode, not the live Arc testnet contract — checking the deployed
+testnet `ArcIDBond` (`0x5E5eA9513f96A537AE966840F3355ff80824691d`) found
+it predates Phase 6.1 (`challengeThreshold()` reverts — function doesn't
+exist in that bytecode; Phase 6.1 was Hardhat-tested but never actually
+redeployed to Arc testnet). A real semantic breach against a scaled bond
+correctly routed to `dispute`, filed a real `fileIndictment()` tx,
+confirmed independently on-chain (`disputes(1)` state, claimAmount,
+rationaleHash) with the bond genuinely untouched; a Hard breach
+immediately after confirmed the "instant" path is unaffected and does
+still move funds. Redeploying the Phase 6.1 contract to Arc testnet is
+Phase 6.4's scope, not done here — until then, `demo:semantic-breach`
+(and any other semantic verdict) will fail its slash step against the
+live contract, by design (the gate fails loud on the routing RPC read
+rather than guessing), while `demo:hard-breach` is unaffected.
+
 ---
 
 ## ArcIDBond Contract Events
