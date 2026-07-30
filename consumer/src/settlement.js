@@ -56,6 +56,7 @@ const { ethers } = require("ethers");
 const config = require("./config");
 const { gateGatewayPayment, gateOnChainRecord, PaymentGateError, PRICE_ATOMIC } = require("./paymentGate");
 const { writeAuditRecord } = require("./auditTrail");
+const { serviceIdFor } = require("./serviceId");
 
 const LEDGER_PATH      = path.join(path.resolve(config.LOG_DIR), "settlement_ledger.json");
 const FAILURE_LOG_PATH = path.join(path.resolve(config.LOG_DIR), "settlement_failures.jsonl");
@@ -181,14 +182,6 @@ function resumeCircuitBreaker(reason = "manual resume") {
   saveLedger(ledger);
   logAlert({ event: "circuit-breaker-resumed", resumedAt, resumeReason: reason, priorTrip: prior });
   return { resumed: true, priorTrip: prior };
-}
-
-// Identifies the exact service interaction being paid for — the oracle's own
-// signature over (value, timestamp). Stable across a retried verdict-handler
-// invocation for the same response, distinct across any two different
-// oracle responses.
-function serviceIdFor(oracleResponse) {
-  return oracleResponse.signature || `${oracleResponse.value}:${oracleResponse.timestamp}`;
 }
 
 // Hashes only the verdict OUTCOME (verdict + should_slash), not the LLM's

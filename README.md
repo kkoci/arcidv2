@@ -11,12 +11,13 @@ Addresses Lepton's **Prior Art #8** (bonded agent reputation) and **RFB 3** (age
 > `ArcIDBond.recordSettlement()`), session-key wallet hardening, a
 > deterministic anti-injection payment gate, a spend-velocity circuit
 > breaker, an attributable audit trail for every settlement attempt, a
-> deterministic Tier-1 verifier ahead of LLM slash adjudication, and a
-> narrowed Tier-2 adjudicator jurisdiction (with deterministic enforcement,
-> not just a prompt instruction) were all added afterward, during the
-> (extended, ongoing) event window — judges track commit activity through
-> the end of the event, and no winner date had been announced at the time.
-> See [CHANGELOG.md](CHANGELOG.md) for the full
+> deterministic Tier-1 verifier ahead of LLM slash adjudication, a narrowed
+> Tier-2 adjudicator jurisdiction (with deterministic enforcement, not just
+> a prompt instruction), and a mirrored deterministic gate in front of
+> `slash()` itself were all added afterward, during the (extended, ongoing)
+> event window — judges track commit activity through the end of the
+> event, and no winner date had been announced at the time. See
+> [CHANGELOG.md](CHANGELOG.md) for the full
 > breakdown, commit-by-commit.
 
 ---
@@ -437,6 +438,7 @@ slash flow already meets.
 | Post-submission | `consumer/src/auditTrail.js` — attributable audit record (agentId, payee, verdict hash, amount, tx hash) for every settlement attempt | ✅ Complete → [CHANGELOG.md](CHANGELOG.md) |
 | Post-submission | `consumer/src/deterministicVerifier.js` — Tier 1 of tiered slash adjudication; mechanically-checkable breaches skip the LLM entirely | ✅ Complete → [CHANGELOG.md](CHANGELOG.md) |
 | Post-submission | Narrowed Tier 2 adjudicator — Claude's jurisdiction restricted to semantic quality, structured `evidence` schema, deterministic `assertWithinJurisdiction()` enforcement | ✅ Complete → [CHANGELOG.md](CHANGELOG.md) |
+| Post-submission | `consumer/src/slashGate.js` — deterministic payee/target/classification/verdict-hash gate in front of `slash()`, mirroring `paymentGate.js` | ✅ Complete → [CHANGELOG.md](CHANGELOG.md) |
 
 **Test suite:** 79 passing (`npm test`) — no external RPC, no `.env` required.
 

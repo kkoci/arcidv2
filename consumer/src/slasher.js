@@ -10,10 +10,19 @@
  * ArcIDBond.slash() directly. The guard enforces its own fixed payout address
  * on-chain, so `consumerAddress` below is only used for the pre-flight bond
  * check and log lines in that mode, not as the actual on-chain recipient.
+ *
+ * Tiered adjudication, Phase 3 (post-submission — see CHANGELOG.md): every
+ * call runs through slashGate.js's gateSlash() first — payee, target,
+ * breach-classification, and verdict-hash checks — BEFORE the DEV_MODE
+ * branch, so gate violations are demonstrable without a funded testnet
+ * wallet, same reasoning Phase 8 applied to the circuit breaker. A gate
+ * rejection throws SlashGateError, which propagates to the caller exactly
+ * like any other slash failure already did.
  */
 
 const { ethers } = require("ethers");
 const config     = require("./config");
+const { gateSlash } = require("./slashGate");
 
 // Human-readable ABI — ethers v6 parses these directly
 const BOND_ABI = [
@@ -39,14 +48,21 @@ function getGuardContract(signerOrProvider) {
 /**
  * Execute a slash on-chain (or simulate in dev mode).
  *
- * @param {string} agentAddress    Oracle provider wallet to slash
- * @param {string} consumerAddress Consumer wallet that receives the bond (ignored
- *                                 on-chain when routing through the session guard —
- *                                 the guard's fixed payoutAddress wins instead)
- * @param {string} reason          LLM-authored rationale (written to AgentSlashed event)
+ * @param {object} params
+ * @param {string} params.agentAddress     Oracle provider wallet to slash
+ * @param {string} params.consumerAddress  Consumer wallet that receives the bond (ignored
+ *                                         on-chain when routing through the session guard —
+ *                                         the guard's fixed payoutAddress wins instead)
+ * @param {string} params.reason           LLM-authored (or Tier 1 machine-generated) rationale,
+ *                                         written to AgentSlashed event
+ * @param {object} params.oracleResponse   The raw oracle response this verdict was adjudicated over
+ * @param {object} params.verdict          The finalized verdict object (either tier)
+ * @param {string} params.expectedHash     Verdict-hash captured at verdict-finalization time
  * @returns {Promise<{txHash: string|null, simulated: boolean}>}
  */
-async function executeSlash(agentAddress, consumerAddress, reason) {
+async function executeSlash({ agentAddress, consumerAddress, reason, oracleResponse, verdict, expectedHash }) {
+  await gateSlash({ agentAddress, consumerAddress, oracleResponse, verdict, expectedHash });
+
   if (config.DEV_MODE) {
     console.log(`  [slash] DEV_MODE — simulated slash`);
     console.log(`  [slash] agent:    ${agentAddress}`);

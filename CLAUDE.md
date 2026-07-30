@@ -268,6 +268,14 @@ consumer/src/adjudicator.js             Phase 2: prompt forbids citing signature
                                          assertWithinJurisdiction() deterministically rejects any verdict that
                                          cites a Tier 1 ground anyway — same "gate it, don't just prompt it"
                                          pattern as paymentGate.js
+consumer/src/slashGate.js               Phase 3: gateSlash() — payee, target (agent === response.oracle ===
+                                         config), breach-classification (partial — no formula until Phase 4;
+                                         ArcIDBond.slash() has no amount/breachClass param yet), and verdict-hash
+                                         binding, called by slasher.js before DEV_MODE branch. Own log channel:
+                                         slash_failures.jsonl (stage: "slash-gate"); rejections also write a
+                                         "gated" line to settlement_audit.jsonl via auditTrail.js
+consumer/src/serviceId.js               serviceIdFor() extracted out of settlement.js so slashGate.js uses the
+                                         identical "which interaction is this" definition, not a second copy
 ```
 
 ---

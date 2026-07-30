@@ -29,6 +29,7 @@ const { adjudicate }            = require("./adjudicator");
 const { executeSlash }          = require("./slasher");
 const { executeSettlement }     = require("./settlement");
 const { verifyDeterministic, logHardBreach } = require("./deterministicVerifier");
+const { computeVerdictHash }    = require("./slashGate");
 
 // ---------------------------------------------------------------------------
 // CLI args
@@ -196,12 +197,23 @@ async function runCycle(cycleNumber) {
 
   if (verdict.verdict === "breach" && verdict.should_slash) {
     console.log(`\n  ${RED}${BOLD}→ Slashing oracle...${RESET}`);
+    // Captured now, right as the verdict is finalized — slashGate.js
+    // independently recomputes this from the same (oracleResponse, verdict)
+    // values right before acting on them and refuses on any mismatch.
+    const expectedHash = computeVerdictHash({
+      serviceId: oracleResponse.signature || `${oracleResponse.value}:${oracleResponse.timestamp}`,
+      verdict,
+      tier: verdict.tier ?? "semantic",
+    });
     try {
-      slashResult = await executeSlash(
-        config.ORACLE_WALLET_ADDRESS,
-        config.CONSUMER_WALLET_ADDRESS,
-        verdict.reason
-      );
+      slashResult = await executeSlash({
+        agentAddress:    config.ORACLE_WALLET_ADDRESS,
+        consumerAddress: config.CONSUMER_WALLET_ADDRESS,
+        reason:          verdict.reason,
+        oracleResponse,
+        verdict,
+        expectedHash,
+      });
       if (slashResult.simulated) {
         console.log(`  ${YELLOW}[DEV] Slash simulated (set DEV_MODE=false to slash on-chain)${RESET}`);
       } else if (slashResult.txHash) {
