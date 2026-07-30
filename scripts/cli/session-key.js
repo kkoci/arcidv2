@@ -4,21 +4,22 @@
  * ConsumerSessionKeyGuard (Phase 6, post-submission — see CHANGELOG.md).
  *
  * Usage:
+ *   GUARD_OWNER_PRIVATE_KEY=... in .env, then:
  *   npm run session:grant -- \
- *     --owner-key <guard-owner-private-key> \
  *     --session-key <hot-wallet-address> \
  *     --payout <fixed-payout-address> \
  *     [--max-amount 0.01] \
  *     [--expires-in 3600] \
  *     [--network arcTestnet]
  *
- *   npm run session:revoke -- \
- *     --owner-key <guard-owner-private-key> \
- *     [--network arcTestnet]
+ *   npm run session:revoke -- [--network arcTestnet]
  *
- * `--owner-key` is the guard's owner — kept offline by whoever operates the
- * agent, never loaded into the running consumer process. `--session-key` is
- * the hot wallet the running consumer agent actually uses (loaded as
+ * The owner's private key is read ONLY from the GUARD_OWNER_PRIVATE_KEY env
+ * var (.env) — never accepted as a CLI argument. See CLAUDE.md's
+ * private-key rule. Kept offline by whoever operates the agent, never
+ * loaded into the running consumer process. `--session-key` is just an
+ * ADDRESS (public, not a secret) — the hot wallet the running consumer
+ * agent actually uses (its own private key loaded separately as
  * CONSUMER_PRIVATE_KEY there) — it can only call guardedSlash() /
  * guardedRecordSettlement() on the guard, capped and time-limited, never
  * ArcIDBond directly.
@@ -30,6 +31,7 @@
 const { ethers } = require("ethers");
 const {
   parseArgs,
+  requireEnvKey,
   loadSessionGuardDeployment,
   getProvider,
   getGuardContract,
@@ -38,20 +40,11 @@ const {
 async function main() {
   const args = parseArgs();
   const action = args.action || (process.argv[2] && !process.argv[2].startsWith("--") ? process.argv[2] : null);
-
-  if (!args["owner-key"]) {
-    console.error(
-      "\nUsage:" +
-        "\n  npm run session:grant -- --owner-key <pk> --session-key <addr> --payout <addr> " +
-        "[--max-amount 0.01] [--expires-in 3600] [--network arcTestnet]" +
-        "\n  npm run session:revoke -- --owner-key <pk> [--network arcTestnet]\n"
-    );
-    process.exit(1);
-  }
+  const key = requireEnvKey("GUARD_OWNER_PRIVATE_KEY");
 
   const network  = args.network || "arcTestnet";
   const provider = getProvider(network);
-  const wallet   = new ethers.Wallet(args["owner-key"], provider);
+  const wallet   = new ethers.Wallet(key, provider);
   const deploy   = loadSessionGuardDeployment(network);
   const guard    = getGuardContract(deploy.guardAddress, wallet);
 

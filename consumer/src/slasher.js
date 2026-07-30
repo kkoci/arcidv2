@@ -18,21 +18,35 @@
  * wallet, same reasoning Phase 8 applied to the circuit breaker. A gate
  * rejection throws SlashGateError, which propagates to the caller exactly
  * like any other slash failure already did.
+ *
+ * Tiered adjudication, Phase 5 (post-submission — see CHANGELOG.md):
+ * ArcIDBond.slash() (Phase 4) requires a breachClass argument — derived
+ * here from verdict.tier, the same signal deterministicVerifier.js (Phase 1)
+ * and adjudicator.js (Phase 2) already attach to every verdict, so there is
+ * exactly one place in the codebase that maps tier -> BreachClass.
  */
 
 const { ethers } = require("ethers");
 const config     = require("./config");
 const { gateSlash } = require("./slashGate");
 
+// BreachClass enum values — must match IArcIDBondSlash.sol exactly
+// (Semantic = 0, Hard = 1).
+const BREACH_CLASS = { semantic: 0, deterministic: 1 };
+
+function breachClassFor(verdict) {
+  return BREACH_CLASS[verdict.tier ?? "semantic"] ?? BREACH_CLASS.semantic;
+}
+
 // Human-readable ABI — ethers v6 parses these directly
 const BOND_ABI = [
-  "function slash(address agent, address consumer, string calldata reason) external",
+  "function slash(address agent, address consumer, string calldata reason, uint8 breachClass) external",
   "function isActiveBondedAgent(address agent) external view returns (bool)",
   "function bonds(address) external view returns (uint256 amount, uint64 postedAt, bool slashed)",
 ];
 
 const GUARD_ABI = [
-  "function guardedSlash(address agent, string calldata reason) external",
+  "function guardedSlash(address agent, string calldata reason, uint8 breachClass) external",
   "function payoutAddress() external view returns (address)",
   "function hasActiveSession() external view returns (bool)",
 ];
@@ -62,16 +76,18 @@ function getGuardContract(signerOrProvider) {
  */
 async function executeSlash({ agentAddress, consumerAddress, reason, oracleResponse, verdict, expectedHash }) {
   await gateSlash({ agentAddress, consumerAddress, oracleResponse, verdict, expectedHash });
+  const breachClass = breachClassFor(verdict);
 
   if (config.DEV_MODE) {
     console.log(`  [slash] DEV_MODE — simulated slash`);
     console.log(`  [slash] agent:    ${agentAddress}`);
     console.log(`  [slash] consumer: ${consumerAddress}`);
+    console.log(`  [slash] breachClass: ${verdict.tier ?? "semantic"} (${breachClass})`);
     console.log(`  [slash] reason:   ${reason.slice(0, 120)}...`);
     return { txHash: null, simulated: true };
   }
 
-  const provider = new ethers.JsonRpcProvider(config.ARC_RPC_URL);
+  const provider = config.getProvider();
   const signer   = new ethers.Wallet(config.CONSUMER_PRIVATE_KEY, provider);
   const bond     = getBondContract(provider);
 
@@ -100,12 +116,12 @@ async function executeSlash({ agentAddress, consumerAddress, reason, oracleRespo
       );
     }
 
-    const tx      = await guard.guardedSlash(agentAddress, reason);
+    const tx      = await guard.guardedSlash(agentAddress, reason, breachClass);
     const receipt = await tx.wait();
     return { txHash: receipt.hash, simulated: false };
   }
 
-  const tx      = await bond.connect(signer).slash(agentAddress, consumerAddress, reason);
+  const tx      = await bond.connect(signer).slash(agentAddress, consumerAddress, reason, breachClass);
   const receipt = await tx.wait();
 
   return { txHash: receipt.hash, simulated: false };
@@ -117,7 +133,7 @@ async function executeSlash({ agentAddress, consumerAddress, reason, oracleRespo
  */
 async function getBondInfo(agentAddress) {
   try {
-    const provider = new ethers.JsonRpcProvider(config.ARC_RPC_URL);
+    const provider = config.getProvider();
     const bond     = getBondContract(provider);
     const info     = await bond.bonds(agentAddress);
     return {

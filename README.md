@@ -14,19 +14,26 @@ Addresses Lepton's **Prior Art #8** (bonded agent reputation) and **RFB 3** (age
 > deterministic Tier-1 verifier ahead of LLM slash adjudication, a narrowed
 > Tier-2 adjudicator jurisdiction (with deterministic enforcement, not just
 > a prompt instruction), a mirrored deterministic gate in front of
-> `slash()` itself, and proportional breach-class slashing with epoch
-> escalation (replacing full-bond-per-incident) were all added afterward,
+> `slash()` itself, proportional breach-class slashing with epoch
+> escalation (replacing full-bond-per-incident), and the full off-chain
+> wiring + two live demo commands for both tiers were all added afterward,
 > during the (extended, ongoing) event window — judges track commit
 > activity through the end of the event, and no winner date had been
 > announced at the time. See [CHANGELOG.md](CHANGELOG.md) for the full
 > breakdown, commit-by-commit.
 >
-> **⚠ `slash()`'s signature changed** (gained a required `breachClass`
-> parameter) as part of this work. The consumer agent's live slash path,
-> the oracle's `/admin/trigger-cycle` demo, and `npm run bond:slash` are
-> currently non-functional against a contract built from this signature —
-> intentionally left that way pending the next phase's wiring, not an
-> oversight. See CHANGELOG.md's Phase 4 entry for the full list.
+> **Two known gaps, flagged rather than left silent:** agent #1's re-bond
+> on the redeployed `ArcIDBond` (`0x5E5eA9...`) is blocked by a persistent
+> Arc testnet RPC write-rate-limit, tabled as a follow-up rather than
+> forced through after repeated wait-and-retry attempts — registration,
+> `transferOwnership()`, and `setAuthorizedSlasher()` all succeeded and are
+> confirmed independently on-chain, only the bond itself is pending. And
+> `npm run demo:semantic-breach`'s live Claude call currently fails on an
+> invalid `ANTHROPIC_API_KEY` (external credential issue, not a code
+> problem — the wiring downstream of it was verified separately with a
+> synthetic verdict object). Neither gap reflects incomplete wiring — see
+> CHANGELOG.md's Phase 5 entry for exactly what was and wasn't verified
+> live, and why.
 
 ---
 
@@ -447,7 +454,8 @@ slash flow already meets.
 | Post-submission | `consumer/src/deterministicVerifier.js` — Tier 1 of tiered slash adjudication; mechanically-checkable breaches skip the LLM entirely | ✅ Complete → [CHANGELOG.md](CHANGELOG.md) |
 | Post-submission | Narrowed Tier 2 adjudicator — Claude's jurisdiction restricted to semantic quality, structured `evidence` schema, deterministic `assertWithinJurisdiction()` enforcement | ✅ Complete → [CHANGELOG.md](CHANGELOG.md) |
 | Post-submission | `consumer/src/slashGate.js` — deterministic payee/target/classification/verdict-hash gate in front of `slash()`, mirroring `paymentGate.js` | ✅ Complete → [CHANGELOG.md](CHANGELOG.md) |
-| Post-submission | Proportional breach-class slashing + epoch escalation in `ArcIDBond.sol`; 25 new tests. **⚠ Breaks consumer/oracle/CLI slash callers until Phase 5 wires the new signature** | ✅ Contract complete, wiring pending → [CHANGELOG.md](CHANGELOG.md) |
+| Post-submission | Proportional breach-class slashing + epoch escalation in `ArcIDBond.sol`; 25 new tests | ✅ Complete → [CHANGELOG.md](CHANGELOG.md) |
+| Post-submission | `breachClass` wiring (slasher.js, oracle trigger-cycle, CLI) + `demo:hard-breach`/`demo:semantic-breach`; new `bad-price` oracle fault mode; live-verified against the redeployed contract | ✅ Complete → [CHANGELOG.md](CHANGELOG.md) |
 
 **Test suite:** 104 passing (`npm test`) — no external RPC, no `.env` required.
 
@@ -588,6 +596,24 @@ npm run fault:null
 npm run fault:bad-sig
 ```
 
+**Current demo commands (post-submission, tiered-adjudication Phase 5 — see
+[CHANGELOG.md](CHANGELOG.md)):** the two commands that actually demonstrate
+today's tiered behavior, run from `consumer/` with the oracle already
+running:
+
+```bash
+npm run demo:hard-breach      # bad-sig — Tier 1, zero LLM calls, ~500ms
+npm run demo:semantic-breach  # bad-price (new oracle fault) — passes Tier 1,
+                               # only Claude's semantic judgment catches it
+```
+
+`demo:hard-breach` is a live-verified alias for `fault:bad-sig` above —
+same command, new name matching what it actually demonstrates now (Tier 1,
+no LLM in the trace, not "Claude reasons about a bad signature" the way
+the historical beat above describes). `demo:semantic-breach` exercises a
+fault mode that didn't exist before this phase — see the oracle's new
+`?fault=bad-price` in "Phase 2 — What Was Built" below.
+
 **Log format** (`consumer/logs/*.jsonl`):
 ```json
 {"cycle":1,"verdict":"breach","reason":"...LLM rationale...","checks":{"timestamp_fresh":false,"value_present":true,"signature_valid":true},"payment_usdc":0.001,"slash_tx":"0xf76fabf9..."}
@@ -622,6 +648,15 @@ A nanopayment-gated Express service that signs every response with the oracle ag
 | `?fault=stale` | Timestamp 90s old, valid signature | "Provider live but serving stale data → slashable" |
 | `?fault=null` | `value: null`, `signature: null` | "Malformed response — crash or intentional? Check if recurring" |
 | `?fault=bad-sig` | Valid value + timestamp, corrupted signature | "Cannot verify authorship → slashable" |
+
+> **Post-submission (tiered-adjudication Phase 5 — see [CHANGELOG.md](CHANGELOG.md)):**
+> the three modes above are all Tier 1 now — Claude never sees them (see the
+> superseded-table note earlier in this doc). A fourth mode was added
+> specifically because none of the three above can reach Tier 2:
+> `?fault=bad-price` returns a genuinely valid signature over a fresh,
+> well-formed, but semantically implausible value (`99999999.99`) — passes
+> every mechanical check, only caught by Claude's judgment. This is what
+> `npm run demo:semantic-breach` exercises.
 
 **Start locally:**
 ```bash
@@ -686,19 +721,28 @@ admin        → setAuthorizedSlasher (owner only, emits SlasherUpdated)
 |----------|---------|
 | DCAPVerifier | `0xBB2835fC4d189340a98084A50DD0B36b4Ff50Ca2` |
 | ArcIDRegistryV2 | `0xf1ad81B9FcB805BB75f3c92B5Db67641B7C729C9` |
-| ArcIDBond (USDC collateral) | `0xE4860b98AFace0166dD323D0E0b12e680d61D59c` |
+| ArcIDBond (USDC collateral, current) | `0x5E5eA9513f96A537AE966840F3355ff80824691d` — post-submission redeploy for tiered-adjudication Phase 4 (proportional slashing); see [CHANGELOG.md](CHANGELOG.md) |
+| ArcIDBond (USDC collateral, original/pre-tiering) | `0xE4860b98AFace0166dD323D0E0b12e680d61D59c` — superseded, kept here for reference; the real historical slash tx in "Live Proof" above happened on this address |
 | ArcIDBond (USYC collateral) | _(run `npm run deploy:usyc:arc`)_ |
 | USDC (Arc testnet) | `0x3600000000000000000000000000000000000000` |
 | USYC token | `0xe9185F0c5F296Ed1797AaE4238D26CCaBEadb86C` |
 | USYC Teller (mint/redeem) | `0x9fdF14c5B14173D74C08Af27AebFf39240dC105A` |
 
-**Registered & bonded agents (Arc testnet, live state):**
+**Registered & bonded agents on the current ArcIDBond (`0x5E5eA9...`), as of
+2026-07-30 — ⚠ not the same live state as the pre-tiering table this
+replaces:**
 
-| Address | Bond | Status |
-|---------|------|--------|
-| `0x8F43C6a0062D33585d97A54d7f380bc6D52B5440` | 5.00 USDC | Active ✓ |
-| `0xEF5adE59183CAd6A2dDC896BE7f8bE58eDf5f993` | 5.00 USDC | Active ✓ |
-| `0xe2F7a0E6d9865C7Dc9B5D19DCc11CBcb4655c661` | 3.00 USDC | **Slashed** → [tx](https://testnet.arcscan.app/tx/0xf76fabf96bc7254cca57b41875cf5cf202aa9ae0e44db541297f9b99df8276b6) |
+| Address | Registered | Bonded | Status |
+|---------|------------|--------|--------|
+| `0xA6622e7E77ed0f63FeA527273418C267C1c70085` (agent #1, rotated) | ✓ | **Pending** — re-bond blocked by an Arc testnet RPC write-rate-limit; owner + authorizedSlasher already point here, confirmed independently on-chain | Also `authorizedSlasher` and contract `owner` |
+| `0xe2F7a0E6d9865C7Dc9B5D19DCc11CBcb4655c661` (oracle wallet) | ✓ (on the original registry, carries over) | **Not yet bonded on this contract** — never was; surfaced during Phase 5 live verification | — |
+| `0xEF5adE59183CAd6A2dDC896BE7f8bE58eDf5f993` (agent #2) | ✓ (on the original registry, carries over) | **Not yet re-bonded on this contract** | — |
+
+The original (pre-tiering) contract's historical state — including the real
+slash documented in "Live Proof" above — is unaffected and remains exactly
+as it was; this table describes the *new* contract's state, which starts
+from zero bonds by design (fresh deployment, no migration — see
+[CHANGELOG.md](CHANGELOG.md)).
 
 ---
 

@@ -3,13 +3,16 @@
  * settle.js — Record an off-chain Gateway settlement against a bonded agent.
  *
  * Usage:
+ *   SLASHER_PRIVATE_KEY=... in .env, then:
  *   npm run bond:settle -- \
- *     --key <slasher-private-key> \
  *     --agent <agent-address> \
  *     --consumer <consumer-address> \
  *     [--amount 0.001] \
  *     [--verdict-hash 0x...] \
  *     [--network arcTestnet]
+ *
+ * The private key is read ONLY from the SLASHER_PRIVATE_KEY env var (.env)
+ * — never accepted as a CLI argument. See CLAUDE.md's private-key rule.
  *
  * Caller must be the authorizedSlasher on ArcIDBond — same key the consumer
  * agent uses to call slash(). This does NOT move funds: the Circle Gateway
@@ -26,6 +29,7 @@
 const { ethers } = require("ethers");
 const {
   parseArgs,
+  requireEnvKey,
   loadDeployment,
   getProvider,
   getContracts,
@@ -33,11 +37,12 @@ const {
 
 async function main() {
   const args = parseArgs();
+  const key  = requireEnvKey("SLASHER_PRIVATE_KEY");
 
-  if (!args.key || !args.agent || !args.consumer) {
+  if (!args.agent || !args.consumer) {
     console.error(
       "\nUsage: npm run bond:settle -- " +
-        "--key <pk> --agent <addr> --consumer <addr> " +
+        "--agent <addr> --consumer <addr> " +
         "[--amount 0.001] [--verdict-hash 0x...] [--network arcTestnet]\n"
     );
     process.exit(1);
@@ -51,7 +56,7 @@ async function main() {
     ethers.keccak256(ethers.toUtf8Bytes(`manual-settlement:${Date.now()}`));
 
   const provider = getProvider(network);
-  const wallet   = new ethers.Wallet(args.key, provider);
+  const wallet   = new ethers.Wallet(key, provider);
   const deploy   = loadDeployment(network);
   const { bond } = getContracts(deploy.addresses, wallet);
 

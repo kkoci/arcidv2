@@ -1,4 +1,5 @@
 require("dotenv").config();
+const { ethers } = require("ethers");
 
 const required = (name) => {
   const v = process.env[name];
@@ -6,7 +7,26 @@ const required = (name) => {
   return v;
 };
 
+// Shared provider factory — pins a static network on Arc testnet so ethers
+// skips its automatic eth_chainId probe on every call. Without this, each of
+// slasher.js/settlement.js/deterministicVerifier.js/auditTrail.js re-probing
+// independently was enough extra RPC traffic to trip Arc testnet's rate
+// limit on its own (see CLAUDE.md's RPC rate-limit note; the same fix was
+// already applied in scripts/cli/_lib.js and oracle/src/chain.js).
+const ARC_TESTNET_CHAIN_ID = 5042002;
+function getProvider(rpcUrl) {
+  const url = rpcUrl || process.env.ARC_RPC_URL || "http://127.0.0.1:8545";
+  const isLocal = url.includes("127.0.0.1") || url.includes("localhost");
+  if (isLocal) return new ethers.JsonRpcProvider(url);
+  return new ethers.JsonRpcProvider(
+    url,
+    { chainId: ARC_TESTNET_CHAIN_ID, name: "arcTestnet" },
+    { staticNetwork: true }
+  );
+}
+
 module.exports = {
+  getProvider,
   // Oracle
   ORACLE_URL:            process.env.ORACLE_URL            || "http://localhost:3001",
   ORACLE_WALLET_ADDRESS: required("ORACLE_WALLET_ADDRESS"), // known oracle wallet — verify sigs against this

@@ -64,7 +64,7 @@ async function checkAttestationCurrent(oracleAddress) {
   if (!config.REGISTRY_ADDRESS) return null; // not configured — skipped, never affects the verdict
   if (cachedAttestationCurrent !== undefined) return cachedAttestationCurrent;
   try {
-    const provider = new ethers.JsonRpcProvider(config.ARC_RPC_URL);
+    const provider = config.getProvider();
     const registry = new ethers.Contract(config.REGISTRY_ADDRESS, REGISTRY_ABI, provider);
     const id = await registry.agentIdBySigner(oracleAddress);
     return (cachedAttestationCurrent = id !== ethers.ZeroHash);

@@ -47,7 +47,7 @@ async function resolveAgentId(agentAddress) {
   if (cachedAgentId !== undefined) return cachedAgentId;
   if (!config.REGISTRY_ADDRESS) return (cachedAgentId = null);
   try {
-    const provider = new ethers.JsonRpcProvider(config.ARC_RPC_URL);
+    const provider = config.getProvider();
     const registry = new ethers.Contract(config.REGISTRY_ADDRESS, REGISTRY_ABI, provider);
     const id = await registry.agentIdBySigner(agentAddress);
     return (cachedAgentId = id === ethers.ZeroHash ? null : id);

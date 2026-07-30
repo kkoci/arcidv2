@@ -58,6 +58,54 @@ function parseArgs() {
 }
 
 // ---------------------------------------------------------------------------
+// Private keys — .env only, NEVER a CLI argument
+// ---------------------------------------------------------------------------
+//
+// See CLAUDE.md: "Never pass private keys as CLI arguments in any command."
+// This was written after a real incident where a key passed via --key was
+// echoed back twice — once by npm's own command-echo, and once by a raw
+// error message (see the SigningKey note below) — both landing in a visible
+// transcript. requireEnvKey() is now the ONLY sanctioned way a CLI script in
+// this project obtains a private key.
+//
+// Root .env private-key variables by role (each script below uses exactly
+// one, matching its actual on-chain permission requirement):
+//   DEPLOYER_PRIVATE_KEY     — ArcIDBond/registry deployer & Ownable owner
+//   AGENT_PRIVATE_KEY        — the wallet registering / posting a bond / checking its own gating
+//   SLASHER_PRIVATE_KEY      — ArcIDBond.authorizedSlasher (slash.js, settle.js)
+//   GUARD_OWNER_PRIVATE_KEY  — ConsumerSessionKeyGuard's Ownable owner (session-key.js grant/revoke)
+
+/**
+ * ethers.Wallet() tolerates a private key with or without the "0x" prefix,
+ * but ethers.SigningKey() (used by signRawDigest() below, for DCAP quote
+ * signing) does NOT — it throws on a bare 64-hex-char string, and that
+ * error message embeds the raw (invalid) value it was given. Normalizing
+ * here means every private key in this file is safe to pass to either API,
+ * and a malformed value never has a reason to be echoed back out.
+ */
+function normalizePrivateKey(key) {
+  if (typeof key !== "string") return key;
+  return key.startsWith("0x") ? key : `0x${key}`;
+}
+
+/**
+ * The only sanctioned way to obtain a private key in this project's CLI
+ * scripts: read it from process.env (sourced from .env — see the dotenv
+ * config() call at the top of this file), never from a CLI flag. Exits with
+ * a clear, actionable message — and never prints the value, valid or not —
+ * if the variable is unset.
+ */
+function requireEnvKey(varName) {
+  const raw = process.env[varName];
+  if (!raw) {
+    console.error(`\nMissing required env var: ${varName}`);
+    console.error(`Set it in .env (project root) — private keys are never passed as CLI arguments.\n`);
+    process.exit(1);
+  }
+  return normalizePrivateKey(raw);
+}
+
+// ---------------------------------------------------------------------------
 // Deployment loader
 // ---------------------------------------------------------------------------
 
@@ -95,13 +143,25 @@ function loadSessionGuardDeployment(network = "arcTestnet") {
 // Provider
 // ---------------------------------------------------------------------------
 
+// Arc testnet chain ID — see CLAUDE.md ("verified via eth_chainId against the
+// live RPC — this is Circle's own Arc Testnet network, not Arbitrum
+// Sepolia's 421614"). Pinning it as a static network (below) skips ethers'
+// automatic eth_chainId probe on every single call — on a rate-limited
+// public RPC this isn't just an optimization, it materially reduces how
+// often these CLI tools hit "request limit reached" at all.
+const ARC_TESTNET_CHAIN_ID = 5042002;
+
 function getProvider(network = "arcTestnet") {
   if (network === "hardhat" || network === "localhost") {
     return new ethers.JsonRpcProvider("http://127.0.0.1:8545");
   }
   const url =
     process.env.ARC_RPC_URL || "https://rpc.testnet.arc.network";
-  return new ethers.JsonRpcProvider(url);
+  return new ethers.JsonRpcProvider(
+    url,
+    { chainId: ARC_TESTNET_CHAIN_ID, name: "arcTestnet" },
+    { staticNetwork: true }
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -160,7 +220,7 @@ function buildPrototypeQuote(agentAddress, reportDataHex) {
 }
 
 function signRawDigest(privateKey, reportData) {
-  const signingKey = new ethers.SigningKey(privateKey);
+  const signingKey = new ethers.SigningKey(normalizePrivateKey(privateKey));
   const sig = signingKey.sign(ethers.getBytes(reportData));
   return ethers.concat([
     ethers.zeroPadValue(sig.r, 32),
@@ -207,6 +267,8 @@ function formatTimestamp(ts) {
 
 module.exports = {
   parseArgs,
+  requireEnvKey,
+  normalizePrivateKey,
   loadDeployment,
   loadSessionGuardDeployment,
   getProvider,

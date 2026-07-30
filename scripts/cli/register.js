@@ -3,7 +3,11 @@
  * register.js — Register a new agent in ArcIDRegistryV2.
  *
  * Usage:
- *   npm run agent:register -- --key <private-key> [--network arcTestnet]
+ *   AGENT_PRIVATE_KEY=... in .env, then:
+ *   npm run agent:register -- [--network arcTestnet]
+ *
+ * The private key is read ONLY from the AGENT_PRIVATE_KEY env var (.env) —
+ * never accepted as a CLI argument. See CLAUDE.md's private-key rule.
  *
  * Builds a fresh DCAP attestation quote for the given wallet and calls
  * ArcIDRegistryV2.registerAgent() on-chain. Idempotent: if the wallet is
@@ -13,6 +17,7 @@
 const { ethers } = require("ethers");
 const {
   parseArgs,
+  requireEnvKey,
   loadDeployment,
   getProvider,
   getContracts,
@@ -21,17 +26,11 @@ const {
 
 async function main() {
   const args = parseArgs();
-
-  if (!args.key) {
-    console.error(
-      "\nUsage: npm run agent:register -- --key <private-key> [--network arcTestnet]\n"
-    );
-    process.exit(1);
-  }
+  const key  = requireEnvKey("AGENT_PRIVATE_KEY");
 
   const network  = args.network || "arcTestnet";
   const provider = getProvider(network);
-  const wallet   = new ethers.Wallet(args.key, provider);
+  const wallet   = new ethers.Wallet(key, provider);
   const deploy   = loadDeployment(network);
   const { registry } = getContracts(deploy.addresses, wallet);
 
@@ -49,7 +48,7 @@ async function main() {
   console.log(`\n→ Building DCAP attestation quote for ${wallet.address}...`);
   const { dcapQuote, reportDataSig, reportData } = buildAttestation(
     wallet.address,
-    args.key
+    key
   );
   console.log(`  reportData: ${reportData}`);
 

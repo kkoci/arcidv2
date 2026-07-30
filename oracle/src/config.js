@@ -48,8 +48,9 @@ module.exports = {
   DEPLOY_BLOCK:           parseInt(process.env.DEPLOY_BLOCK  || "0", 10),
   CONSUMER_PRIVATE_KEY:   process.env.CONSUMER_PRIVATE_KEY   || "",
   CONSUMER_WALLET_ADDRESS:process.env.CONSUMER_WALLET_ADDRESS|| "",
-  ANTHROPIC_API_KEY:      process.env.ANTHROPIC_API_KEY      || "",
-  MODEL:                  process.env.MODEL                  || "claude-sonnet-4-6",
+  // ANTHROPIC_API_KEY / MODEL removed (tiered-adjudication Phase 5 — see
+  // CHANGELOG.md): triggerCycle() no longer runs its own LLM adjudicator —
+  // bad-sig is now a Tier 1 deterministic verdict, zero Claude calls.
 
   // Phala Cloud TDX attestation (Phase 7)
   // USE_REAL_PHALA=true  → connect to the dstack guest agent's Unix socket via

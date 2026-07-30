@@ -3,7 +3,11 @@
  * post-bond.js — Post a USDC bond to ArcIDBond.
  *
  * Usage:
- *   npm run bond:post -- --key <private-key> [--amount 5.0] [--network arcTestnet]
+ *   AGENT_PRIVATE_KEY=... in .env, then:
+ *   npm run bond:post -- [--amount 5.0] [--network arcTestnet]
+ *
+ * The private key is read ONLY from the AGENT_PRIVATE_KEY env var (.env) —
+ * never accepted as a CLI argument. See CLAUDE.md's private-key rule.
  *
  * --amount is in whole USDC (e.g. 5.0 = 5 USDC = 5_000_000 atomic units).
  * Requires the wallet to already be registered in ArcIDRegistryV2.
@@ -12,6 +16,7 @@
 const { ethers } = require("ethers");
 const {
   parseArgs,
+  requireEnvKey,
   loadDeployment,
   getProvider,
   getContracts,
@@ -21,20 +26,14 @@ const {
 
 async function main() {
   const args = parseArgs();
-
-  if (!args.key) {
-    console.error(
-      "\nUsage: npm run bond:post -- --key <private-key> [--amount 5.0] [--network arcTestnet]\n"
-    );
-    process.exit(1);
-  }
+  const key  = requireEnvKey("AGENT_PRIVATE_KEY");
 
   const network    = args.network || "arcTestnet";
   const amountUsdc = parseFloat(args.amount ?? "5.0");
   const amountAtom = BigInt(Math.round(amountUsdc * 1e6));
 
   const provider = getProvider(network);
-  const wallet   = new ethers.Wallet(args.key, provider);
+  const wallet   = new ethers.Wallet(key, provider);
   const deploy   = loadDeployment(network);
   const { registry, bond, usdc } = getContracts(deploy.addresses, wallet);
 
@@ -49,7 +48,7 @@ async function main() {
   if (agentId === ethers.ZeroHash) {
     console.error(
       `\n✗ Wallet is not registered in ArcIDRegistryV2.` +
-      `\n  Run: npm run agent:register -- --key ${args.key} --network ${network}\n`
+      `\n  Set AGENT_PRIVATE_KEY to this wallet's key in .env, then run: npm run agent:register -- --network ${network}\n`
     );
     process.exit(1);
   }

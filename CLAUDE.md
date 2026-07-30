@@ -63,6 +63,17 @@ Before starting any task, read in this order:
 **Secrets:** always read from `.env` via `process.env`. Never hardcode private keys
 or contract addresses. `.env.example` documents all required vars.
 
+**Never pass private keys as CLI arguments in any command.** Private keys must
+only be read from `.env` files via environment variables. Added after a real
+incident (post-submission — see CHANGELOG.md): a key passed via a `--key` flag
+was echoed into a visible transcript twice — once by `npm run`'s own
+command-echo, and once by a downstream error message that embedded the raw
+argument value it was given. Every `scripts/cli/*.js` tool now uses
+`requireEnvKey(VAR_NAME)` from `_lib.js`, which reads exclusively from
+`process.env` and never accepts a key-shaped value from `argv`. If you add a
+new script that needs a private key, use `requireEnvKey()` — do not add a
+`--key`-style flag, no matter how convenient it seems for a one-off script.
+
 **USYC allowlist:** USYC requires wallet allowlisting via Circle Support. Chase
 this starting Day 0 — lead time is the only real risk. If allowlist hasn't arrived,
 ship the USYC contract anyway (deployed + verified = stronger than a hand-wave).
@@ -300,12 +311,44 @@ contracts/ConsumerSessionKeyGuard.sol   guardedSlash() gained a breachClass pass
 test/ArcIDBondSlashClasses.test.js      25 new tests — the full plan reviewed and approved before this was written
 ```
 
-**⚠ Known temporary breakage (see CHANGELOG.md's Phase 4 entry for the full explanation):**
-`slash()`'s new required `breachClass` parameter breaks every off-chain caller still on the
-old 3-arg signature — `consumer/src/slasher.js`, `oracle/src/chain.js`'s `triggerCycle()`,
-and `scripts/cli/slash.js`. Deliberately left unfixed — choosing which `breachClass` to pass
-based on adjudication tier is tiered-adjudication Phase 5's explicit job. Do not "fix" these
-piecemeal before Phase 5 lands; the real fix is that phase's wiring, not a patch here.
+Phase 5 wiring + demo CLI files (post-submission, tiered-adjudication doc,
+Phase 5 — see CHANGELOG.md; resolves the breakage the Phase 4 entry above used to describe):
+```
+consumer/src/slasher.js                 breachClassFor(verdict) — maps verdict.tier
+                                         ("deterministic"->Hard, else->Semantic) to the
+                                         BreachClass enum; the one place this mapping lives
+oracle/src/chain.js                     triggerCycle()'s local LLM adjudicator (VERDICT_TOOL,
+                                         SYSTEM_PROMPT, adjudicate(), @anthropic-ai/sdk) REMOVED
+                                         entirely — bad-sig is now a Tier 1 deterministic
+                                         SIG_INVALID verdict, zero Claude calls, matching real
+                                         consumer behavior instead of contradicting it
+oracle/src/index.js                     new fault mode ?fault=bad-price — valid signature/
+                                         timestamp/schema, semantically implausible value
+                                         (99999999.99); the only fault that reaches Tier 2
+scripts/cli/slash.js                    new required --breach-class <hard|semantic> flag;
+                                         calls previewSlash() before sending, reads actual
+                                         transferred amount from AgentSlashed after
+consumer/package.json                   npm run demo:hard-breach / demo:semantic-breach
+```
+Both demo commands are live-verified against the redeployed contract
+(`0x5E5eA9513f96A537AE966840F3355ff80824691d`) — see CHANGELOG.md's Phase 5
+entry for exactly what was confirmed live vs. via a synthetic verdict
+(the semantic path's live Claude call is blocked by an external
+`ANTHROPIC_API_KEY` credential issue, not a wiring problem).
+
+Deploy + admin CLI files (post-submission — see CHANGELOG.md's "Deployment +
+Private-Key CLI Security Fix" entry):
+```
+scripts/deploy_bond_v2.js               Deploys ArcIDBond alone, pointed at the EXISTING
+                                         ArcIDRegistryV2 (read from deployments/<net>_standalone.json,
+                                         NEVER from the stale root .env ARCID_REGISTRY_ADDRESS)
+scripts/cli/set-authorized-slasher.js   npm run bond:set-slasher — requires DEPLOYER_PRIVATE_KEY (owner)
+scripts/cli/transfer-ownership.js       npm run bond:transfer-ownership — single-step (plain Ownable,
+                                         not Ownable2Step) — double-check --new-owner, no undo
+scripts/cli/_lib.js                     requireEnvKey() / normalizePrivateKey() — see the private-key
+                                         rule above; getProvider() now pins a static network (skips
+                                         eth_chainId probing, reduces RPC rate-limit pressure)
+```
 
 ---
 

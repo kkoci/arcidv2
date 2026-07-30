@@ -205,7 +205,7 @@ function logFailure(record) {
 }
 
 async function recordSettlementOnChain({ agent, consumer, amount, hash }) {
-  const provider = new ethers.JsonRpcProvider(config.ARC_RPC_URL);
+  const provider = config.getProvider();
   const signer   = new ethers.Wallet(config.CONSUMER_PRIVATE_KEY, provider);
 
   if (config.SESSION_GUARD_ADDRESS) {

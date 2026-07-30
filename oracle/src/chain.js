@@ -5,12 +5,29 @@
  *
  * Reads ArcIDBond + ArcIDRegistryV2 events and bond state.
  * Implements the full slash loop: re-bond oracle if needed → generate
- * bad-sig response → LLM adjudication → on-chain slash → recharge oracle.
+ * bad-sig response → Tier 1 deterministic verdict → on-chain slash →
+ * recharge oracle.
+ *
+ * Tiered adjudication, Phase 5 (post-submission — see CHANGELOG.md):
+ * triggerCycle() used to run its own separate LLM adjudicator (ported once
+ * from consumer/src/adjudicator.js and never kept in sync with Phases 1-2's
+ * tiering) over a hardcoded bad-sig fault. bad-sig is a mechanically-
+ * checkable signature failure — the real consumer flow never invokes
+ * Claude for it (see deterministicVerifier.js), and leaving the LLM call
+ * here while also passing BreachClass.Hard to slash() would have written a
+ * contradiction on-chain: a Claude-authored reason string paired with a
+ * classification that claims no judgment was involved. Removed the local
+ * LLM adjudicator entirely — this endpoint now matches real behavior, one
+ * fewer Claude call per trigger as a direct consequence, not a separate
+ * optimization.
  */
 
 const { ethers }   = require("ethers");
-const Anthropic    = require("@anthropic-ai/sdk");
 const config       = require("./config");
+
+// BreachClass enum values — must match IArcIDBondSlash.sol exactly
+// (Semantic = 0, Hard = 1).
+const BREACH_CLASS_HARD = 1;
 
 // ── ABIs ─────────────────────────────────────────────────────────────────────
 
@@ -18,7 +35,7 @@ const BOND_ABI = [
   "function bonds(address) view returns (uint256 amount, uint64 postedAt, bool slashed)",
   "function isActiveBondedAgent(address) view returns (bool)",
   "function postBond(uint256 amount) external",
-  "function slash(address agent, address consumer, string calldata reason) external",
+  "function slash(address agent, address consumer, string calldata reason, uint8 breachClass) external",
   "function authorizedSlasher() view returns (address)",
   "event AgentSlashed(address indexed agent, address indexed consumer, uint256 amount, string reason)",
 ];
@@ -36,8 +53,21 @@ const ERC20_ABI = [
 
 // ── Providers / contracts ─────────────────────────────────────────────────────
 
+// Pinning a static network skips ethers' automatic eth_chainId probe on
+// every call — on a rate-limited public RPC this measurably reduces how
+// often "request limit reached" gets hit at all (see scripts/cli/_lib.js
+// for the same fix, added after repeatedly hitting this during Phase 5
+// deploy/wiring work — see CHANGELOG.md). Only pinned for the real Arc
+// testnet URL — a local/hardhat ARC_RPC_URL keeps auto-detection so this
+// doesn't silently break local dev against a different chain ID.
 function getProvider() {
-  return new ethers.JsonRpcProvider(config.ARC_RPC_URL);
+  const isLocal = config.ARC_RPC_URL.includes("127.0.0.1") || config.ARC_RPC_URL.includes("localhost");
+  if (isLocal) return new ethers.JsonRpcProvider(config.ARC_RPC_URL);
+  return new ethers.JsonRpcProvider(
+    config.ARC_RPC_URL,
+    { chainId: 5042002, name: "arcTestnet" },
+    { staticNetwork: true }
+  );
 }
 
 function getBondContract(signerOrProvider) {
@@ -224,65 +254,7 @@ function verifySignature(value, timestamp, expectedOracle, signature) {
   }
 }
 
-// ── LLM adjudicator (ported from consumer/src/adjudicator.js) ────────────────
-
-const VERDICT_TOOL = {
-  name: "deliver_verdict",
-  description: "Deliver the final adjudication verdict on whether the oracle provider met their SLA.",
-  input_schema: {
-    type: "object",
-    properties: {
-      verdict:      { type: "string", enum: ["ok", "breach", "uncertain"] },
-      reason:       { type: "string" },
-      should_slash: { type: "boolean" },
-      checks: {
-        type: "object",
-        properties: {
-          timestamp_fresh: { type: "boolean" },
-          value_present:   { type: "boolean" },
-          signature_valid: { type: "boolean" },
-        },
-        required: ["timestamp_fresh", "value_present", "signature_valid"],
-      },
-    },
-    required: ["verdict", "reason", "should_slash", "checks"],
-  },
-};
-
-const SYSTEM_PROMPT = `You are an autonomous adjudication agent for the ArcID bonded reputation system.
-Evaluate whether a bonded oracle provider met its SLA for a paid query.
-SLA: (1) timestamp within max_age_seconds, (2) non-null parseable value, (3) ECDSA signature recovers to oracle wallet.
-Return ok/breach/uncertain with written rationale. Breach rationale goes on-chain in AgentSlashed event.
-The rationale is displayed as plain text in a UI — write plain prose, no markdown (no **bold**, no lists).`;
-
-async function adjudicate({ value, timestamp, signature, ageSeconds, sigValid, sigError }) {
-  if (!config.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not set in oracle/.env");
-  const client = new Anthropic.default({ apiKey: config.ANTHROPIC_API_KEY });
-
-  const fresh    = ageSeconds <= config.MAX_AGE_SECONDS;
-  const present  = value !== null && value !== undefined && value !== "";
-
-  const msg = await client.messages.create({
-    model:      config.MODEL,
-    max_tokens: 1024,
-    system:     SYSTEM_PROMPT,
-    tools:      [VERDICT_TOOL],
-    tool_choice:{ type: "tool", name: "deliver_verdict" },
-    messages:   [{ role: "user", content:
-      `Oracle response: value=${JSON.stringify(value)}, timestamp=${timestamp} (${ageSeconds}s ago), ` +
-      `signature=${signature ? signature.slice(0,20)+"..." : "NULL"}. ` +
-      `SLA max_age=${config.MAX_AGE_SECONDS}s. ` +
-      `Checks: timestamp_fresh=${fresh}, value_present=${present}, signature_valid=${sigValid}` +
-      (sigError ? ` (error: ${sigError})` : "") + `. Deliver verdict.`,
-    }],
-  });
-
-  const tool = msg.content.find(b => b.type === "tool_use");
-  if (!tool) throw new Error("Adjudicator did not call deliver_verdict");
-  return tool.input;
-}
-
-// ── Trigger cycle: re-bond → fault → adjudicate → slash → recharge ─────────────
+// ── Trigger cycle: re-bond → fault → Tier 1 verdict → slash → recharge ────────
 
 async function triggerCycle() {
   if (!config.CONSUMER_PRIVATE_KEY || !config.BOND_CONTRACT_ADDRESS) {
@@ -330,27 +302,45 @@ async function triggerCycle() {
   const sigResult  = verifySignature(value, timestamp, config.ORACLE_WALLET_ADDRESS, signature);
   log.push(`Sig valid: ${sigResult.valid}, error: ${sigResult.error}`);
 
-  // ── 4. LLM adjudication ───────────────────────────────────────────────────
-  log.push("Calling Claude adjudicator...");
-  const verdict = await adjudicate({
-    value, timestamp, signature, ageSeconds,
-    sigValid: sigResult.valid, sigError: sigResult.error,
-  });
-  log.push(`Verdict: ${verdict.verdict} — ${verdict.reason.slice(0, 80)}...`);
+  // ── 4. Tier 1 deterministic verdict — no LLM call ─────────────────────────
+  // bad-sig is a mechanically-checkable signature failure (tiered
+  // adjudication Phase 1 — see CHANGELOG.md); the real consumer flow never
+  // invokes Claude for this class of fault, and this demo endpoint matches
+  // that now: same reasoning deterministicVerifier.js applies, same
+  // SIG_INVALID code, zero Claude calls, zero LLM cost for this trigger.
+  log.push("Evaluating Tier 1 (deterministic) — no LLM call for a bad-sig fault");
+  const reason = `[SIG_INVALID] ${sigResult.error || "signature does not recover to the registered oracle wallet"}`;
+  const verdict = {
+    verdict: "breach",
+    reason,
+    should_slash: true,
+    tier: "deterministic",
+    code: "SIG_INVALID",
+  };
+  log.push(`Verdict: breach (Tier 1, deterministic) — ${reason.slice(0, 80)}...`);
 
   // ── 5. Slash on breach ────────────────────────────────────────────────────
   let slashTx = null;
   if (verdict.verdict === "breach" && verdict.should_slash) {
-    const rebondInfo = await bond.bonds(config.ORACLE_WALLET_ADDRESS);
     const slashBond  = getBondContract(consumerWallet);
     const tx = await slashBond.slash(
       config.ORACLE_WALLET_ADDRESS,
       config.CONSUMER_WALLET_ADDRESS,
-      verdict.reason
+      verdict.reason,
+      BREACH_CLASS_HARD
     );
     const r  = await tx.wait();
     slashTx  = r.hash;
-    log.push(`Slash tx: ${slashTx} — ${Number(rebondInfo.amount)/1e6} USDC → consumer`);
+
+    // Proportional slashing (tiered adjudication Phase 4 — see CHANGELOG.md):
+    // the transferred amount is no longer always the full bond. Read the
+    // actual amount from AgentSlashed rather than assuming it — the
+    // pre-slash bond total is no longer the right number to log.
+    const slashedEvent = r.logs
+      .map((l) => { try { return slashBond.interface.parseLog(l); } catch { return null; } })
+      .find((e) => e && e.name === "AgentSlashed");
+    const slashedAmount = slashedEvent ? Number(slashedEvent.args.amount) / 1e6 : null;
+    log.push(`Slash tx: ${slashTx} — ${slashedAmount ?? "?"} USDC → consumer (breachClass=Hard)`);
 
     // ── 6. Recharge oracle (1 USDC from consumer) to enable next cycle ──────
     const rechargeAmt = 1_000_000n; // 1 USDC

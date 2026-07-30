@@ -4,7 +4,11 @@
  * cannot post a bond.
  *
  * Usage:
- *   npm run gating:check -- --key <private-key> [--network arcTestnet]
+ *   AGENT_PRIVATE_KEY=... in .env, then:
+ *   npm run gating:check -- [--network arcTestnet]
+ *
+ * The private key is read ONLY from the AGENT_PRIVATE_KEY env var (.env) —
+ * never accepted as a CLI argument. See CLAUDE.md's private-key rule.
  *
  * If the wallet IS registered: reports its agentId and notes that postBond()
  * would succeed.
@@ -16,6 +20,7 @@
 const { ethers } = require("ethers");
 const {
   parseArgs,
+  requireEnvKey,
   loadDeployment,
   getProvider,
   getContracts,
@@ -25,17 +30,11 @@ const FIVE_USDC = 5_000_000n;
 
 async function main() {
   const args = parseArgs();
-
-  if (!args.key) {
-    console.error(
-      "\nUsage: npm run gating:check -- --key <private-key> [--network arcTestnet]\n"
-    );
-    process.exit(1);
-  }
+  const key  = requireEnvKey("AGENT_PRIVATE_KEY");
 
   const network  = args.network || "arcTestnet";
   const provider = getProvider(network);
-  const wallet   = new ethers.Wallet(args.key, provider);
+  const wallet   = new ethers.Wallet(key, provider);
   const deploy   = loadDeployment(network);
   const { registry, bond } = getContracts(deploy.addresses, wallet);
 
@@ -49,9 +48,7 @@ async function main() {
     console.log(`\n  Wallet IS registered.`);
     console.log(`  agentId: ${agentId}`);
     console.log(`  postBond() would SUCCEED for this wallet.`);
-    console.log(
-      `\n  To post a bond:  npm run bond:post -- --key ${args.key} --network ${network}\n`
-    );
+    console.log(`\n  To post a bond:  npm run bond:post -- --network ${network}\n`);
     return;
   }
 
@@ -69,9 +66,7 @@ async function main() {
     if (msg.includes("Agent not TEE-verified in ArcID registry")) {
       console.log(`\n  ✓ GATING CONFIRMED`);
       console.log(`    Revert: "Agent not TEE-verified in ArcID registry"`);
-      console.log(
-        `\n    To register:  npm run agent:register -- --key ${args.key} --network ${network}\n`
-      );
+      console.log(`\n    To register:  npm run agent:register -- --network ${network}\n`);
     } else {
       // Unexpected revert message — surface it
       console.log(`\n  Reverted with unexpected message:`);

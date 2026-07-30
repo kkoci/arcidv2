@@ -238,8 +238,8 @@ app.post("/api/verdicts", (req, res) => {
 app.post("/admin/fault", (req, res) => {
   if (!isFaultAllowed(req)) return res.status(403).json({ error: "Requires X-Fault-Token" });
   const { mode } = req.body;
-  if (!["stale", "null", "bad-sig"].includes(mode)) {
-    return res.status(400).json({ error: "mode must be stale | null | bad-sig" });
+  if (!["stale", "null", "bad-sig", "bad-price"].includes(mode)) {
+    return res.status(400).json({ error: "mode must be stale | null | bad-sig | bad-price" });
   }
   activeFaultMode = mode;
   console.log(`[fault] Fault mode set: ${activeFaultMode}`);
@@ -328,6 +328,16 @@ app.get("/api/price", x402, async (req, res) => {
     signature = null;
   } else if (faultMode === "bad-sig") {
     signature = "0x" + "ab".repeat(32) + "cd".repeat(32) + "01";
+  } else if (faultMode === "bad-price") {
+    // Tiered adjudication Phase 5 demo fault (post-submission — see
+    // CHANGELOG.md): a validly-signed, fresh, well-formed response whose
+    // VALUE is semantically implausible — a sentinel-looking number no real
+    // market price would ever be. Passes every Tier 1 mechanical check
+    // (signature/timestamp/schema all fine); only Tier 2 (Claude, reasoning
+    // about plausibility) can catch it. This is what demo:semantic-breach
+    // exercises — the counterpart to bad-sig's Tier 1 hard-breach demo.
+    value = "99999999.99";
+    signature = await signResponse(value, timestamp);
   } else {
     signature = await signResponse(value, timestamp);
   }

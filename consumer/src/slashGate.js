@@ -22,23 +22,25 @@
  *      redirecting punishment to a different bonded agent than the one the
  *      interaction was actually with.
  *
- *   3. BREACH CLASSIFICATION — HONEST LIMITATION, stated up front: Phase 4
- *      of the tiered-adjudication doc (not yet shipped) is what makes
- *      slash amounts proportional to breach class via an on-chain formula.
- *      ArcIDBond.slash() today still transfers the full bond
- *      unconditionally and has no amount or breachClass parameter to
- *      validate against — there is no formula yet to recompute and match.
- *      Until Phase 4 lands, this check validates the closest real
- *      invariant available: the verdict carries no externally-asserted
- *      amount at all (true by schema construction for both tiers — neither
- *      deterministicVerifier.js's hard-breach result nor adjudicator.js's
- *      deliver_verdict schema has an amount field), and the two
- *      independent tier-tracking signals — the caller's own `tier` value
- *      and, for semantic verdicts, Claude's own `breach_class` field —
- *      agree with each other. Once Phase 4 ships a real formula and an
- *      amount-accepting slash() signature, this check upgrades to
- *      recompute and match that formula's output; it does not do that yet
- *      and does not pretend to.
+ *   3. BREACH CLASSIFICATION — as of Phase 4 (shipped — see CHANGELOG.md),
+ *      ArcIDBond.slash() DOES compute a real, proportional amount on-chain
+ *      from a `breachClass` argument (BreachClass.Semantic | Hard), and
+ *      exposes `previewSlash()` to check that formula's output ahead of a
+ *      call. This gate still does NOT call previewSlash() to cross-check
+ *      against the live on-chain formula — deliberately, to stay a purely
+ *      local/synchronous check with no RPC round-trip, same as
+ *      paymentGate.js's checks. What it validates instead: the verdict
+ *      carries no externally-asserted amount at all (true by schema
+ *      construction for both tiers — neither deterministicVerifier.js's
+ *      hard-breach result nor adjudicator.js's deliver_verdict schema has
+ *      an amount field, so there's nowhere for one to come from), and the
+ *      two independent tier-tracking signals — the caller's own `tier`
+ *      value and, for semantic verdicts, Claude's own `breach_class` field
+ *      — agree with each other. The actual amount enforcement is the
+ *      contract's job (ArcIDBond._computeSlashAmount(), always internal,
+ *      never caller-supplied) — this gate's job is catching a
+ *      classification mismatch before the call, not re-deriving the dollar
+ *      figure.
  *
  *   4. VERDICT-HASH BINDING — recomputes a hash over (serviceId,
  *      verdict.verdict, verdict.should_slash, tier, classification code)
