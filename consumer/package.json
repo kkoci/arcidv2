@@ -13,6 +13,9 @@
     "fault:bad-price": "node src/index.js --fault bad-price --once",
     "demo:hard-breach":     "node src/index.js --fault bad-sig --once",
     "demo:semantic-breach": "node src/index.js --fault bad-price --once",
+    "demo:large-semantic-breach":  "node scripts/demo-large-semantic-breach.js",
+    "demo:dispute-auto-finalize":  "node scripts/demo-dispute-auto-finalize.js",
+    "demo:dispute-owner-override": "node scripts/demo-dispute-owner-override.js",
     "breaker:status": "node scripts/breaker.js",
     "breaker:resume": "node scripts/breaker.js --resume"
   },

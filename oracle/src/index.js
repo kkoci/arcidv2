@@ -119,9 +119,11 @@ function isFaultAllowed(req) {
 
 // ---------------------------------------------------------------------------
 // Cost circuit breaker — bounds worst case if FAULT_TOKEN ever leaks or is
-// guessed. /admin/trigger-cycle calls Claude + does a real slash tx;
-// /admin/demo-pay moves real (if trivial) USDC. A shared cooldown caps how
-// often either can fire, independent of the token check above.
+// guessed. /admin/trigger-cycle does a real on-chain slash tx (no LLM call
+// — see the route's own comment, tiered-adjudication Phase 5 removed that
+// entirely); /admin/demo-pay moves real (if trivial) USDC. A shared
+// cooldown caps how often either can fire, independent of the token check
+// above.
 // ---------------------------------------------------------------------------
 
 // 5 minutes — deliberately longer than a full trigger-cycle (re-bond + slash +
@@ -246,7 +248,12 @@ app.post("/admin/fault", (req, res) => {
   res.json({ ok: true, fault_mode: activeFaultMode });
 });
 
-// Trigger the full slash loop: re-bond → bad-sig → Claude → on-chain slash → recharge
+// Trigger the full slash loop: re-bond → bad-sig → Tier 1 deterministic
+// verdict → on-chain slash → recharge. No LLM call — bad-sig is a
+// mechanically-checkable signature failure, decided the same way the real
+// consumer flow decides it (see deterministicVerifier.js). This endpoint's
+// own separate LLM adjudicator was removed entirely during tiered-
+// adjudication Phase 5 (see CHANGELOG.md) — not just re-gated.
 app.post("/admin/trigger-cycle", async (req, res) => {
   if (!isFaultAllowed(req)) return res.status(403).json({ error: "Requires X-Fault-Token" });
   if (!checkCooldown(res)) return;
