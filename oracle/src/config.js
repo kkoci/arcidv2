@@ -46,6 +46,19 @@ module.exports = {
   BOND_CONTRACT_ADDRESS:  process.env.BOND_CONTRACT_ADDRESS  || "",
   REGISTRY_ADDRESS:       process.env.REGISTRY_ADDRESS       || "",
   DEPLOY_BLOCK:           parseInt(process.env.DEPLOY_BLOCK  || "0", 10),
+  // eth_getLogs block-range-per-call cap — provider-dependent, not chain-
+  // dependent. Alchemy's free tier caps this at 10; default matches that so
+  // chain-stats scanning actually works out of the box. Raise this (env-only,
+  // no code change) if/when the plan is upgraded to a higher per-call limit —
+  // see CHANGELOG.md's incremental-scanning entry for why the chunk count
+  // itself matters far less than it used to now that scans are incremental.
+  ARC_LOG_CHUNK_SIZE:     parseInt(process.env.ARC_LOG_CHUNK_SIZE || "10", 10),
+  // Delay between successive SUCCESSFUL chunk calls in a multi-chunk log
+  // scan — separate from withBackoff()'s retry-on-failure delay. Without
+  // this, a large chunk count fires back-to-back with no pacing at all and
+  // trips the provider's requests-per-second cap even when each individual
+  // call would otherwise succeed.
+  ARC_LOG_CALL_DELAY_MS:  parseInt(process.env.ARC_LOG_CALL_DELAY_MS || "200", 10),
   CONSUMER_PRIVATE_KEY:   process.env.CONSUMER_PRIVATE_KEY   || "",
   CONSUMER_WALLET_ADDRESS:process.env.CONSUMER_WALLET_ADDRESS|| "",
   // ANTHROPIC_API_KEY / MODEL removed (tiered-adjudication Phase 5 — see

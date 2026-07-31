@@ -2,10 +2,10 @@
   "network": "arcTestnet",
   "chainId": 5042002,
   "deployer": "0x8F43C6a0062D33585d97A54d7f380bc6D52B5440",
-  "timestamp": 1785434487,
+  "timestamp": 1785455571,
   "note": "ArcIDBond only — tiered-adjudication Phase 4 (proportional slashing). Registry and USDC unchanged from the existing standalone deployment.",
   "addresses": {
-    "ArcIDBond": "0x5E5eA9513f96A537AE966840F3355ff80824691d",
+    "ArcIDBond": "0xBEBD8a19C1BE2802829c1fc50066348EBBD86b3f",
     "ArcIDRegistryV2": "0xf1ad81B9FcB805BB75f3c92B5Db67641B7C729C9",
     "collateralToken": "0x3600000000000000000000000000000000000000"
   }

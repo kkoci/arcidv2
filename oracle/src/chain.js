@@ -79,8 +79,24 @@ function getRegistryContract(provider) {
 }
 
 // ── Paginated log query ────────────────────────────────────────────────────────
+//
+// Incremental scanning (post-submission — see CHANGELOG.md's arcid2 Phase 6.4
+// entry). getChainStats() used to call this with the SAME fromBlock
+// (DEPLOY_BLOCK) on every single call, re-scanning the entire historical
+// range from scratch — routinely, every 5 seconds, since the frontend polls
+// /api/chain-stats on a 5s interval and getChainStats()'s own cache TTL is
+// also 5s. That was always wasteful (the original ~629 chunks at
+// CHUNK=9,000, redone every 5s the dashboard was open) — it just stayed
+// tolerable enough against the old unauthenticated public RPC not to be
+// noticed. Alchemy's free-tier 10-block eth_getLogs cap turned that same
+// waste into ~565,855 chunks per scan, which made it actively non-functional
+// rather than merely wasteful. The real fix is this: remember the last
+// block successfully scanned per event filter, and only scan what's new
+// since then. This is the correct fix regardless of RPC provider or plan
+// tier — reducing CHUNK size or upgrading the plan only changes how
+// expensive the (now one-time, not routine) cold-start scan is.
+const chunkLogCache = new Map(); // cacheKey -> { events: [], lastScannedBlock: number }
 
-const CHUNK = 9_000;
 const MAX_RETRIES = 4;
 const BASE_BACKOFF_MS = 500;
 
@@ -105,14 +121,38 @@ async function withBackoff(fn) {
   }
 }
 
-async function paginatedLogs(contract, filter, fromBlock, latest) {
-  const events = [];
-  for (let start = fromBlock; start <= latest; start += CHUNK) {
-    const end  = Math.min(start + CHUNK - 1, latest);
-    const logs = await withBackoff(() => contract.queryFilter(filter, start, end));
-    events.push(...logs);
+/**
+ * Incrementally paginated + cached log query. `cacheKey` identifies the
+ * (contract, filter) pair across calls — this process only ever tracks one
+ * bond + one registry, so a fixed string per call site is sufficient. Only
+ * scans blocks after whatever was already scanned for that key; returns the
+ * full accumulated event list either way.
+ */
+async function paginatedLogs(cacheKey, contract, filter, fromBlock, latest) {
+  let entry = chunkLogCache.get(cacheKey);
+  if (!entry) {
+    entry = { events: [], lastScannedBlock: fromBlock - 1 };
+    chunkLogCache.set(cacheKey, entry);
   }
-  return events;
+
+  const scanFrom = entry.lastScannedBlock + 1;
+  if (scanFrom > latest) return entry.events; // nothing new since the last scan
+
+  const chunkSize = config.ARC_LOG_CHUNK_SIZE;
+  for (let start = scanFrom; start <= latest; start += chunkSize) {
+    const end  = Math.min(start + chunkSize - 1, latest);
+    const logs = await withBackoff(() => contract.queryFilter(filter, start, end));
+    entry.events.push(...logs);
+    entry.lastScannedBlock = end;
+    // Pacing between successive SUCCESSFUL calls — withBackoff() only
+    // delays after a failure; without this, a large chunk count (e.g. a
+    // cold-start scan on a low per-call block-range cap) fires back-to-back
+    // with no pacing at all and trips the provider's requests-per-second
+    // cap even when each individual call would otherwise succeed.
+    if (end < latest) await sleep(config.ARC_LOG_CALL_DELAY_MS);
+  }
+
+  return entry.events;
 }
 
 // ── Chain stats (cached 5s) ────────────────────────────────────────────────────
@@ -136,7 +176,7 @@ async function getChainStats({ force = false } = {}) {
   const from     = config.DEPLOY_BLOCK || 0;
 
   // Registered agents
-  const regEvents = await paginatedLogs(registry, registry.filters.AgentRegistered(), from, latest);
+  const regEvents = await paginatedLogs("registry:AgentRegistered", registry, registry.filters.AgentRegistered(), from, latest);
   const agentMap  = {};
   for (const ev of regEvents) {
     agentMap[ev.args.attestedSigner.toLowerCase()] = ev.args.agentId;
@@ -162,7 +202,7 @@ async function getChainStats({ force = false } = {}) {
   }
 
   // Slash count
-  const slashEvents = await paginatedLogs(bond, bond.filters.AgentSlashed(), from, latest);
+  const slashEvents = await paginatedLogs("bond:AgentSlashed", bond, bond.filters.AgentSlashed(), from, latest);
 
   chainStatsCache = {
     agents,
