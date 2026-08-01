@@ -507,6 +507,23 @@ provisioning turned out to be an account-scoping mixup, not a CLI flag bug
 (that theory was checked against the installed CLI's own `--help` and
 ruled out before being written down anywhere).
 
+Circle Nanopayments verification — no code gap (post-submission, arcid2
+Phase 7, Phase 7.3 — see CHANGELOG.md): no files changed except docs
+(`SUBMISSION.md`, `README.md`, CHANGELOG.md itself). Confirmed by reading
+the installed `@circle-fin/x402-batching` SDK's own source
+(`dist/server/index.js`) that `oracle/src/index.js:88-101`'s
+`createGatewayMiddleware(...).require(...)` internally calls the exact
+same `BatchFacilitatorClient.verify()`/`.settle()` methods Circle's
+reference Nanopayments demo (`circlefin/arc-nanopayments`'s `lib/x402.ts`)
+calls by hand — genuine SDK parity, not a similarly-named
+reimplementation. Same conclusion for the consumer side:
+`consumer/src/settlement.js:286-291`'s `GatewayClient(...).
+onBeforePaymentCreation(...).pay(...)` matches the reference repo's
+`agent.mts` buyer pattern exactly, including the identical lifecycle-hook
+mechanism. Do not re-litigate this without reading the SDK source again —
+the comparison was done at the implementation level (line numbers, actual
+method calls), not by name/API-shape similarity alone.
+
 ---
 
 ## ArcIDBond Contract Events

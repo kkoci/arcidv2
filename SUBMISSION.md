@@ -210,7 +210,7 @@ http://localhost:5174  _(or Vercel URL if deployed)_
 ---
 
 ### Circle tools used
-- **x402 nanopayments via Circle Gateway:** Oracle's `/api/price` is wrapped with `@circle-fin/x402-batching`'s `createGatewayMiddleware()`. Every oracle call costs $0.001 USDC, verified and settled (batched) via Circle Gateway's real testnet facilitator. Consumer agent pays automatically, no human approval required.
+- **x402 nanopayments via Circle Gateway:** Oracle's `/api/price` (`oracle/src/index.js:88-101`) is wrapped with `@circle-fin/x402-batching`'s `createGatewayMiddleware()`. Every oracle call costs $0.001 USDC, verified and settled (batched) via Circle Gateway's real testnet facilitator. Consumer agent pays automatically, no human approval required (`consumer/src/settlement.js:286-291`, `GatewayClient.pay()`). This is Circle's actual Agent Nanopayments SDK, not a custom x402 reimplementation — confirmed by reading `createGatewayMiddleware()`'s own source (`@circle-fin/x402-batching/dist/server/index.js`) against Circle's reference demo (`circlefin/arc-nanopayments`'s `lib/x402.ts`): both ultimately call the identical `BatchFacilitatorClient.verify()`/`.settle()` methods, one through the convenience wrapper, the other by hand. See CHANGELOG.md's Phase 7.3 entry for the full comparison.
 - **USYC yield-bearing collateral:** ArcIDBond deployed with USYC as collateral token. Agents mint USYC via the Hashnote Teller on Arc testnet (`0x9fdF14c5B14173D74C08Af27AebFf39240dC105A`). Bond earns ~4.9% T-bill APY while staked.
 - **Arc testnet:** All contracts deployed on Arc (chain ID 5042002). Uses ArcIDRegistry for TEE-gated identity.
 
