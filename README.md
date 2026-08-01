@@ -109,6 +109,41 @@ gap: every slash/settlement outcome also produces a real, externally-readable
 
 ---
 
+## Marketplace Gating + Grant Metrics
+
+Post-submission, Phase 8.5 (see CHANGELOG.md). Two dashboard/aggregation
+additions — no new trust logic, both read data that already exists on-chain
+or in the existing verdict stream.
+
+**Unbonded-agent gating** — `/api/price` can refuse callers that aren't
+TEE-registered in ArcIDRegistryV2, on top of (not instead of) the x402
+payment requirement itself: "an agent marketplace that refuses unbonded
+agents." Since arcid2 has no consumer-side bond concept (only providers
+post collateral), this checks *registration*, reusing the same
+`agentIdBySigner` moat `postBond()` already enforces. **Opt-in, default
+off** (`REQUIRE_REGISTERED_CALLER=true` in `oracle/.env`) — a deliberate
+choice, not an oversight: turning it on would also refuse any outside
+consumer agent that pays but isn't itself TEE-registered, directly cutting
+against the real-outside-traffic traction goal this project's own
+grant-readiness assessment flags as the actual decisive weakness. Live-
+verified both ways: a registered caller is served, an unregistered one gets
+a `403`, and the default (off) leaves today's open-marketplace behavior
+completely unchanged. Only gates the `DEV_MODE` x402 path today — gating
+the real Gateway path would need dropping to the manual
+`BatchFacilitatorClient` pattern so the payer can be inspected before
+settlement clears; not built this pass.
+
+**Grant metrics dashboard** — the frontend's sidebar gained a
+`GrantMetricsCard`: % of verdicts resolved deterministically (Tier 1, no
+LLM call) vs. requiring Claude's judgment (Tier 2), the challenge/dispute
+rate (indictments vs. instant slashes), and cumulative USDC throughput
+(slashed + settled) through bonded services. All three are aggregations
+over existing on-chain events (`AgentSlashed`, `PaymentSettled`,
+`IndictmentFiled`, `DisputeResolved`) and the existing per-verdict `tier`
+field — `oracle/src/chain.js`'s `getChainStats()` and the in-memory `stats`
+object, not new state.
+---
+
 ## Quick Start (3 terminals)
 
 ```bash

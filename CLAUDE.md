@@ -618,6 +618,39 @@ transactions (not a guess). CHANGELOG.md's entry has the full evidence
 chain (direct-EOA success, contract-relay failure, spoofed-msg.sender
 isolation test) if this needs re-verifying after any future Arc change.
 
+Unbonded-agent gating + grant metrics dashboard (post-submission, arcid2
+"Grant-Readiness Repositioning" doc, Phase 8.5 — see CHANGELOG.md):
+```
+oracle/src/chain.js       isRegisteredAgent() — reuses ArcIDBond's own agentIdBySigner
+                          moat. getChainStats() gained PaymentSettled/IndictmentFiled/
+                          DisputeResolved event reads -> disputeRate, cumulativeThroughputUsdc,
+                          slashedVolumeUsdc, settledVolumeUsdc in the summary.
+oracle/src/index.js       devX402Middleware() gates on isRegisteredAgent() when
+                          REQUIRE_REGISTERED_CALLER=true (default false — see below).
+                          stats.deterministicVerdicts/semanticVerdicts tallied from each
+                          verdict's existing tier field.
+oracle/src/config.js      REQUIRE_REGISTERED_CALLER — opt-in, default false.
+frontend/src/components/GrantMetricsCard.jsx   New sidebar stat-tile card — Tier-1
+                                                share, challenge rate, cumulative
+                                                throughput. Matches AgentCard/
+                                                USYCBondCard's existing glass-tile
+                                                style exactly; dataviz skill loaded
+                                                before writing it (three stat numbers
+                                                is a stat-tile job, not a chart — no
+                                                new palette needed).
+```
+`REQUIRE_REGISTERED_CALLER` defaults to **false**, deliberately — this is
+not an oversight. Turning it on refuses any outside consumer agent that
+pays but isn't itself TEE-registered in ArcIDRegistryV2, which directly
+cuts against the real-outside-traffic traction goal this project's own
+grant-readiness research flags as the actual decisive weakness. Live-
+verified both states (a running oracle, both flag values, both a
+registered and an unregistered payer) before deciding the default, not
+assumed. Only gates the `DEV_MODE` x402 path — the real Gateway path would
+need the manual `BatchFacilitatorClient` pattern instead of
+`createGatewayMiddleware()`'s convenience wrapper to gate before
+settlement clears; not built this pass, stated in CHANGELOG.md.
+
 ---
 
 ## ArcIDBond Contract Events

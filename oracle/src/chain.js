@@ -38,6 +38,9 @@ const BOND_ABI = [
   "function slash(address agent, address consumer, string calldata reason, uint8 breachClass) external",
   "function authorizedSlasher() view returns (address)",
   "event AgentSlashed(address indexed agent, address indexed consumer, uint256 amount, string reason)",
+  "event PaymentSettled(address indexed agent, address indexed consumer, uint256 amount, bytes32 verdictHash)",
+  "event IndictmentFiled(uint256 indexed disputeId, address indexed agent, address indexed consumer, uint256 claimAmount, uint256 challengeDeadline, bytes32 rationaleHash)",
+  "event DisputeResolved(uint256 indexed disputeId, bool approved, uint256 amountTransferred, bool autoFinalized)",
 ];
 
 const REGISTRY_ABI = [
@@ -204,6 +207,28 @@ async function getChainStats({ force = false } = {}) {
   // Slash count
   const slashEvents = await paginatedLogs("bond:AgentSlashed", bond, bond.filters.AgentSlashed(), from, latest);
 
+  // Grant-readiness metrics (Phase 8.5, post-submission — see CHANGELOG.md).
+  // All three read events that already exist from Phases 1/6/post-
+  // submission — this is aggregation over the existing on-chain log, not
+  // new trust logic.
+  const settlementEvents  = await paginatedLogs("bond:PaymentSettled",    bond, bond.filters.PaymentSettled(),    from, latest);
+  const indictmentEvents  = await paginatedLogs("bond:IndictmentFiled",   bond, bond.filters.IndictmentFiled(),   from, latest);
+  const disputeResolvedEvents = await paginatedLogs("bond:DisputeResolved", bond, bond.filters.DisputeResolved(), from, latest);
+
+  let slashedVolume = 0n;
+  for (const ev of slashEvents) slashedVolume += ev.args.amount;
+  let settledVolume = 0n;
+  for (const ev of settlementEvents) settledVolume += ev.args.amount;
+
+  // Challenge/dispute rate: disputed breaches (indictments) as a share of
+  // ALL breach outcomes (instant slashes + indictments) — an indictment IS
+  // a breach outcome, just one routed to the challenge window instead of
+  // executing immediately (see ArcIDBond.sol's slash() threshold gate).
+  const totalBreachOutcomes = slashEvents.length + indictmentEvents.length;
+  const disputeRate = totalBreachOutcomes > 0
+    ? indictmentEvents.length / totalBreachOutcomes
+    : 0;
+
   chainStatsCache = {
     agents,
     summary: {
@@ -211,6 +236,13 @@ async function getChainStats({ force = false } = {}) {
       activeAgents: activeCount,
       tvlUsdc:      tvlRaw.toString(),
       totalSlashes: slashEvents.length,
+      totalSettlements:     settlementEvents.length,
+      totalIndictments:     indictmentEvents.length,
+      totalDisputesResolved: disputeResolvedEvents.length,
+      disputeRate:          disputeRate, // 0..1 — indictments / (slashes + indictments)
+      cumulativeThroughputUsdc: (slashedVolume + settledVolume).toString(), // slashed + settled, atomic units
+      slashedVolumeUsdc:  slashedVolume.toString(),
+      settledVolumeUsdc:  settledVolume.toString(),
     },
     updatedAt: Math.floor(Date.now() / 1000),
   };
@@ -403,4 +435,24 @@ async function triggerCycle() {
   return { verdict: verdict.verdict, reason: verdict.reason, slashTx, log };
 }
 
-module.exports = { getChainStats, triggerCycle, getGatewayBalance, payForPriceViaGateway };
+// ── Marketplace gating — refuse unregistered callers (Phase 8.5, post-
+// submission — see CHANGELOG.md) ───────────────────────────────────────────
+//
+// Reuses the SAME agentIdBySigner() check postBond()'s own moat is built on
+// (ArcIDBond.sol) — arcid2 has no consumer-side BOND concept (only providers
+// post collateral), so "bonded or registered" per the scoping doc's own
+// wording resolves to "registered": is this caller a TEE-attested identity
+// in ArcIDRegistryV2 at all? Free view call, not cached — call volume here
+// is one call per oracle request, not a hot loop.
+async function isRegisteredAgent(address) {
+  if (!config.REGISTRY_ADDRESS || !address) return false;
+  try {
+    const registry = getRegistryContract(getProvider());
+    const agentId = await registry.agentIdBySigner(address);
+    return agentId !== ethers.ZeroHash;
+  } catch {
+    return false; // an RPC failure here must fail closed, not silently admit an unverifiable caller
+  }
+}
+
+module.exports = { getChainStats, triggerCycle, getGatewayBalance, payForPriceViaGateway, isRegisteredAgent };

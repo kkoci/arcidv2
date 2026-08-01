@@ -35,6 +35,16 @@ module.exports = {
   DEV_MODE: process.env.DEV_MODE !== "false",
   FAULT_TOKEN: process.env.FAULT_TOKEN || "dev-fault-token",
 
+  // Marketplace gating (Phase 8.5, post-submission — see CHANGELOG.md).
+  // Opt-in, default off — refuses callers that aren't TEE-registered in
+  // ArcIDRegistryV2, on top of (not instead of) the existing x402 payment
+  // requirement. Left off by default because turning it on would also
+  // refuse any outside consumer agent that pays but isn't itself
+  // TEE-registered — a real trade-off against this project's traction
+  // goal, not a free win. Only affects the DEV_MODE x402 path today (see
+  // devX402Middleware's own comment for the production-mode gap).
+  REQUIRE_REGISTERED_CALLER: process.env.REQUIRE_REGISTERED_CALLER === "true",
+
   // Phase 5 — USYC yield-bearing bond contract
   USYC_BOND_ADDRESS:  process.env.USYC_BOND_ADDRESS  || "",
   USDC_BOND_ADDRESS:  process.env.USDC_BOND_ADDRESS  || "",

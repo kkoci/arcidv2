@@ -18,7 +18,7 @@
 const express    = require("express");
 const config     = require("./config");
 const { signResponse } = require("./signer");
-const { getChainStats, triggerCycle, getGatewayBalance, payForPriceViaGateway } = require("./chain");
+const { getChainStats, triggerCycle, getGatewayBalance, payForPriceViaGateway, isRegisteredAgent } = require("./chain");
 const { getAttestation } = require("./attest");
 
 const app = express();
@@ -47,6 +47,12 @@ const stats = {
   uncertainCount:  0,
   slashCount:      0,
   activeBonds:     1, // start at 1 (the test bond from Phase 1 deploy)
+  // Grant-readiness metrics (Phase 8.5, post-submission — see CHANGELOG.md).
+  // Tallied from each verdict's own `tier` field, already attached by the
+  // consumer's tiered adjudicator (Phase 1/2 of the tiered-adjudication
+  // doc) — this is a count of an existing signal, not a new one.
+  deterministicVerdicts: 0,
+  semanticVerdicts:      0,
 };
 
 const verdicts = []; // circular buffer — last 50
@@ -57,8 +63,31 @@ let lastConsumer = null;
 // x402 middleware
 // ---------------------------------------------------------------------------
 
-function devX402Middleware(req, res, next) {
-  if (!req.headers["x-payment"]) {
+// Marketplace gating (Phase 8.5, post-submission — see CHANGELOG.md):
+// "an agent marketplace that refuses unbonded agents" — arcid2 has no
+// consumer-side BOND concept (only providers post collateral), so this
+// resolves to the identity check that already IS the moat elsewhere in this
+// project: is the caller a TEE-attested agent in ArcIDRegistryV2 at all?
+// Opt-in, default OFF (REQUIRE_REGISTERED_CALLER unset/false) — deliberately
+// NOT unconditional. Turning this on would refuse any outside agent that
+// pays but isn't itself TEE-registered, which would directly cut against
+// the traction goal (real outside callers) this project's own grant-
+// readiness assessment flags as the actual decisive weakness. Real,
+// functioning, and demoable on demand (flip the env var) without risking
+// the live open-marketplace behavior other traction-relevant callers use.
+//
+// PRODUCTION-MODE GAP, stated rather than silently unhandled: this only
+// gates the DEV_MODE path below. The real Gateway path (loadProdX402(),
+// createGatewayMiddleware().require()) settles payment and calls the route
+// handler as one automatic block — by the time this file's own code runs,
+// payment has already cleared. Gating the caller BEFORE settlement in
+// production would need dropping to the manual BatchFacilitatorClient.verify()/
+// .settle() pattern (confirmed equivalent to the convenience wrapper in
+// Phase 7.3's CHANGELOG entry) so the payer can be inspected first — not
+// built this pass.
+async function devX402Middleware(req, res, next) {
+  const paymentHeader = req.headers["x-payment"];
+  if (!paymentHeader) {
     return res.status(402).json({
       error:       "Payment Required",
       x402Version: 1,
@@ -78,6 +107,21 @@ function devX402Middleware(req, res, next) {
       ],
     });
   }
+
+  if (config.REQUIRE_REGISTERED_CALLER) {
+    // Fails closed: an unparsable header or missing payer field can't prove
+    // the caller's identity, so it's treated the same as unregistered.
+    let payer = null;
+    try { payer = JSON.parse(paymentHeader).payer ?? null; } catch { /* payer stays null */ }
+
+    if (!(await isRegisteredAgent(payer))) {
+      return res.status(403).json({
+        error:  "Unregistered caller",
+        detail: "This service only serves TEE-attested agents registered in ArcIDRegistry — refuses unbonded/unregistered callers, not just unpaid ones.",
+      });
+    }
+  }
+
   next();
 }
 
@@ -260,6 +304,8 @@ app.post("/api/verdicts", (req, res) => {
   if (v.verdict === "breach")    { stats.breachCount++; stats.slashCount++; }
   if (v.verdict === "uncertain") stats.uncertainCount++;
   if (v.payment_usdc)            stats.totalVolumeUSDC = +(stats.totalVolumeUSDC + v.payment_usdc).toFixed(6);
+  if (v.tier === "deterministic") stats.deterministicVerdicts++;
+  else if (v.tier === "semantic") stats.semanticVerdicts++;
 
   res.json({ ok: true });
 });
@@ -291,6 +337,7 @@ app.post("/admin/trigger-cycle", async (req, res) => {
     if (result.slashTx) {
       stats.slashCount++;
       stats.breachCount++;
+      stats.deterministicVerdicts++; // bad-sig is always Tier 1 — see this route's own module comment
       verdicts.push({
         verdict:    result.verdict,
         reason:     result.reason,
