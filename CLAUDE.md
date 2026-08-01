@@ -524,6 +524,25 @@ mechanism. Do not re-litigate this without reading the SDK source again —
 the comparison was done at the implementation level (line numbers, actual
 method calls), not by name/API-shape similarity alone.
 
+Circle Agent Marketplace listing — prepared, not submitted (post-submission,
+arcid2 Phase 7, Phase 7.4 — see CHANGELOG.md):
+```
+MARKETPLACE_LISTING.md    Full submission package: the listing entry in Circle's real
+                           schema (reverse-engineered from live `circle services search
+                           --output json` results, cross-checked against `circle services
+                           inspect` on an existing listing), the required intake-form
+                           fields, and two explicitly-flagged blockers (no self-serve
+                           publish API — it's a Google Form; the Phala CVM oracle URL is
+                           currently unreachable, re-verified this session via curl, not
+                           assumed from a stale note). Do NOT treat this file's existence
+                           as proof of an active marketplace listing.
+```
+Positioning follows the scoping doc's own recommendation: the listing
+description frames arcid2 as the bonded/TEE-attested/adjudicated trust
+layer, not just "a price feed" — while every field an agent would
+actually invoke (`resource`, `input`, `price`) stays accurate to the
+concrete `/api/price` endpoint, nothing padded to sound bigger than it is.
+
 ---
 
 ## ArcIDBond Contract Events
