@@ -543,6 +543,20 @@ layer, not just "a price feed" — while every field an agent would
 actually invoke (`resource`, `input`, `price`) stays accurate to the
 concrete `/api/price` endpoint, nothing padded to sound bigger than it is.
 
+Circle CLI in the demo flow (post-submission, arcid2 Phase 7, Phase 7.5 —
+see CHANGELOG.md): `SUBMISSION.md`'s new "Beat 3.6 — Circle CLI, live"
+runs `circle services inspect` / `circle services pay` against the real
+local oracle, paying with the Phase 7.2 oracle Agent Wallet. Live-verified,
+not just scripted: real on-chain Gateway deposit (`--method direct`,
+min. 0.5 USDC — discovered this session), real signed `/api/price`
+response returned through `circle services pay`, and `/api/gateway-
+balance`'s `pendingBatch` confirmed ticking up by the payment amount
+before settling — Gateway's batching shown concretely, not asserted.
+CHANGELOG.md has the full arcid2-command-to-Circle-CLI-command mapping
+table. The marketplace form submission (Phase 7.4's remaining blocker) is
+explicitly NOT part of this phase — separate task, pending the Phala CVM
+redeploy.
+
 ---
 
 ## ArcIDBond Contract Events
