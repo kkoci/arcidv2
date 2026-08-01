@@ -84,6 +84,7 @@ The oracle's payment path is wired to Circle's real infrastructure, not a mocked
 | **Circle Gateway Nanopayments** | `@circle-fin/x402-batching`'s `createGatewayMiddleware()` wraps the endpoint; payments are verified and settled (batched) by Circle's live testnet facilitator (`gateway-api-testnet.circle.com`). |
 | **Arc Testnet** | Chain ID `5042002` — Circle's own Arc network (`eip155:5042002` in Gateway's supported-networks list), using the same USDC precompile (`0x3600...0000`) as `ArcIDBond.sol`. |
 | **Seller Wallet** | The oracle's wallet (`0xe2F7a0E6d9865C7Dc9B5D19DCc11CBcb4655c661`) is the Gateway seller — receives $0.001 USDC per call, checkable live via `GET /api/gateway-balance`. |
+| **Circle Agent Wallets** | Post-submission Phase 7.2 (see CHANGELOG.md) — provisioned via `@circle-fin/cli` (`circle wallet login` + `circle wallet create`), scoped to USDC custody/balance-checks only. Oracle: `0x9867a0a4b7631a66b0433034a45e472023f809d6`. Consumer: `0xb84cd0e18a75dd89e6f7e2781012748f612d13c3`. **Not** used for signing — `postBond`/`slash`/`fileIndictment`/`resolveDispute` remain on the existing raw-key + `ConsumerSessionKeyGuard` path. The two wallets are on two different Circle accounts (`kristian.koci@gmail.com` for the oracle, `kristian.koci@feeltech.co.uk` for the consumer) — a CLI-driven balance check needs `circle wallet login` for whichever account owns the wallet being queried. |
 
 The frontend's "Circle Gateway Nanopayment" card pays for one real `/api/price` call and shows the seller's Gateway balance before → after.
 

@@ -470,6 +470,43 @@ path (real previewSlash() + real resolveDispute() tx, confirmed on-chain),
 reject path (bond confirmed untouched), the abort-on-non-"yes" path, and
 the already-resolved refusal path all work exactly as designed.
 
+Circle Agent Wallets — USDC custody only (post-submission, arcid2 Phase 7,
+Phase 7.2 — see CHANGELOG.md):
+```
+oracle/.env.example, oracle/.env         ORACLE_AGENT_WALLET_ADDRESS — real Circle Agent
+                                          Wallet (0x9867a0a4b7631a66b0433034a45e472023f809d6),
+                                          20 USDC, provisioned via @circle-fin/cli. USDC
+                                          custody/balance-check only — does NOT sign
+                                          anything. ORACLE_PRIVATE_KEY is unchanged and
+                                          still signs every oracle response.
+consumer/.env.example, consumer/.env     CONSUMER_AGENT_WALLET_ADDRESS — a second Agent
+                                          Wallet (0xb84cd0e18a75dd89e6f7e2781012748f612d13c3),
+                                          20 USDC, same provisioning method. Also custody-only
+                                          — postBond/slash/fileIndictment/resolveDispute stay
+                                          on CONSUMER_PRIVATE_KEY / ConsumerSessionKeyGuard
+                                          exactly as before Phase 7.2.
+README.md                                "Circle Stack" table — new Agent Wallets row with
+                                          both addresses and the account-split note below.
+```
+Explicit design decision (researched against Circle's real `circlefin/skills`
+repo before deciding, not assumed): Agent Wallets is CLI-first,
+human-OTP-authenticated, has no documented Node SDK, and its spending-policy
+primitive is mainnet-only (testnet chains are rejected per Circle's own
+docs) — unusable for arcid2's all-testnet deployment regardless of choice.
+So Agent Wallets is used **only** for role-scoped USDC custody/balance
+checks here; `ConsumerSessionKeyGuard.sol` remains the sole signer for bond
+contract calls, unchanged from Phase 6. The two wallets live on two
+*different* Circle accounts (oracle: `kristian.koci@gmail.com`, consumer:
+`kristian.koci@feeltech.co.uk`) — a deliberate choice (asked and confirmed)
+over consolidating to one, since `circle wallet balance`/`list` are scoped
+to whichever account is currently logged in locally. A CLI-driven check
+(or Phase 7.5's demo script) needs `circle wallet login` for whichever
+account owns the wallet being queried. See CHANGELOG.md's Phase 7.2 entry
+for the full debugging story — an initial "wallet vanished" scare during
+provisioning turned out to be an account-scoping mixup, not a CLI flag bug
+(that theory was checked against the installed CLI's own `--help` and
+ruled out before being written down anywhere).
+
 ---
 
 ## ArcIDBond Contract Events
