@@ -270,7 +270,7 @@ async function executeSettlement({ oracleResponse, verdict }) {
     console.log(`  [settlement] service: ${serviceId.slice(0, 24)}...`);
     // Notional amount, not moved — lets the circuit breaker's rolling spend
     // math be exercised (and demoed) without a funded testnet wallet.
-    const result = { settled: true, simulated: true, txHash: null, onChainTx: null, amount: PRICE_ATOMIC.toString() };
+    const result = { settled: true, simulated: true, txHash: null, onChainTx: null, amount: PRICE_ATOMIC.toString(), verdictHash: hash };
     ledger[dedupeKey] = { ...result, at: new Date().toISOString() };
     saveLedger(ledger);
     await writeAuditRecord({
@@ -330,6 +330,7 @@ async function executeSettlement({ oracleResponse, verdict }) {
     txHash:    transaction,
     onChainTx,
     amount:    amount != null ? String(amount) : null,
+    verdictHash: hash, // Phase 8.2 — same hash written on-chain as recordSettlement()'s feedbackHash
   };
   ledger[dedupeKey] = { ...result, at: new Date().toISOString() };
   saveLedger(ledger);
@@ -342,4 +343,4 @@ async function executeSettlement({ oracleResponse, verdict }) {
   return result;
 }
 
-module.exports = { executeSettlement, getCircuitBreakerStatus, resumeCircuitBreaker };
+module.exports = { executeSettlement, getCircuitBreakerStatus, resumeCircuitBreaker, verdictHash };

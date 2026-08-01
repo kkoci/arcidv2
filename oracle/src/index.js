@@ -6,6 +6,7 @@
  *   GET  /api/stats           — traction counters (frontend traction strip)
  *   GET  /api/verdicts        — last 50 adjudication verdicts (frontend feed)
  *   POST /api/verdicts        — consumer agent pushes verdict after each cycle
+ *   GET  /api/verdict/:verdictHash — single verdict record, ERC-8004 feedbackURI target (Phase 8.2)
  *   POST /admin/fault         — set server-side fault mode (Trigger Fault button)
  *   POST /admin/fault/reset   — clear fault mode (Reset button)
  *
@@ -175,6 +176,33 @@ app.get("/api/stats", (req, res) => {
 app.get("/api/verdicts", (req, res) => {
   // newest first — wrapped for frontend consumption
   res.json({ verdicts: [...verdicts].reverse() });
+});
+
+// ERC-8004 reputation dual-write's feedbackURI target (Phase 8.2, post-
+// submission — see CHANGELOG.md). Serves the structured verdict record
+// already in the (last-50, in-memory) verdicts buffer, keyed by the same
+// verdictHash field consumer/src/index.js now attaches to every record
+// before POSTing it here — the same value ArcIDBond's dual-write passes to
+// ReputationRegistry.giveFeedback() as feedbackHash.
+//
+// HONEST LIMITATION, not hidden: verdictHash is not guaranteed unique per
+// individual verdict occurrence. For a clean settlement it's a hash of
+// {verdict, should_slash} only (see consumer/src/settlement.js's own
+// verdictHash() — deliberately outcome-only, not rationale-wording-
+// sensitive), so every "ok" verdict with the same should_slash value shares
+// one hash. For a slash it's keccak256(reason) — unique per distinct
+// rationale text, but two slashes with byte-identical reason text (e.g. the
+// dispute paths' fixed placeholder strings) would collide too. This route
+// returns the MOST RECENT matching record in the buffer, not a guaranteed
+// 1:1 lookup — an honest property of the underlying hash scheme, not a bug
+// introduced here.
+app.get("/api/verdict/:verdictHash", (req, res) => {
+  const { verdictHash } = req.params;
+  const match = [...verdicts].reverse().find((v) => v.verdictHash === verdictHash);
+  if (!match) {
+    return res.status(404).json({ error: "No verdict found for this hash in the current in-memory buffer (last 50)." });
+  }
+  res.json(match);
 });
 
 // TDX DCAP attestation quote for this oracle instance
@@ -386,6 +414,7 @@ app.listen(config.PORT, () => {
   console.log(`    GET  /health`);
   console.log(`    GET  /api/stats`);
   console.log(`    GET  /api/verdicts`);
+  console.log(`    GET  /api/verdict/:verdictHash (ERC-8004 feedbackURI target)`);
   console.log(`    POST /api/verdicts          (consumer pushes verdicts)`);
   console.log(`    POST /admin/fault           (set fault mode)`);
   console.log(`    POST /admin/fault/reset     (clear fault mode)`);

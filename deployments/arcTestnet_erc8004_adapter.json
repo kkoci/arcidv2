@@ -1,0 +1,12 @@
+{
+  "network": "arcTestnet",
+  "chainId": 5042002,
+  "deployer": "0x8F43C6a0062D33585d97A54d7f380bc6D52B5440",
+  "timestamp": 1785614440,
+  "note": "ERC8004ReputationAdapter — Phase 8.2 (post-submission). Not yet wired into ArcIDBond (setReputationAdapter not called here — separate confirmed step). agentId8004 mappings not yet set (see scripts/cli/register-8004-identity.js + set-8004-agent-id.js).",
+  "addresses": {
+    "ERC8004ReputationAdapter": "0x42a7A56962cc3E990b2Ac5E506602277aB3aefC5",
+    "ReputationRegistry": "0x8004B663056A597Dffe9eCcC1965A193B7388713",
+    "ArcIDBond": "0xBEBD8a19C1BE2802829c1fc50066348EBBD86b3f"
+  }
+}

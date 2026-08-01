@@ -6,6 +6,7 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IArcIDRegistry} from "./interfaces/IArcIDRegistry.sol";
 import {IArcIDBondSlash} from "./interfaces/IArcIDBondSlash.sol";
+import {IERC8004ReputationAdapter} from "./interfaces/IERC8004ReputationAdapter.sol";
 
 /// @title ArcIDBond
 /// @notice Bonded reputation contract for ArcID agents on Arc.
@@ -154,6 +155,12 @@ contract ArcIDBond is Ownable, ReentrancyGuard, IArcIDBondSlash {
     IArcIDRegistry     public immutable registry;         // live ArcIDRegistry on Arc
 
     address public authorizedSlasher; // consumer agent wallet; owner can update
+
+    /// @dev ERC-8004 reputation dual-write (Phase 8.2, post-submission — see
+    ///      CHANGELOG.md). Zero address (the default) disables the dual-write
+    ///      entirely — every existing deployment, and every existing test,
+    ///      keeps working unchanged until this is explicitly set.
+    address public reputationAdapter;
 
     mapping(address => BondInfo) public bonds;
 
@@ -304,6 +311,10 @@ contract ArcIDBond is Ownable, ReentrancyGuard, IArcIDBondSlash {
     /// @dev Emitted when the owner retunes the challenge-window config.
     event ChallengeParametersUpdated(uint256 challengeThreshold, uint64 disputeWindow);
 
+    /// @dev ERC-8004 reputation dual-write (Phase 8.2, post-submission — see
+    ///      CHANGELOG.md).
+    event ReputationAdapterUpdated(address indexed oldAdapter, address indexed newAdapter);
+
     // -------------------------------------------------------------------------
     // custom errors (gas-efficient; BondPosted gating uses require() for demo UX)
     // -------------------------------------------------------------------------
@@ -418,7 +429,12 @@ contract ArcIDBond is Ownable, ReentrancyGuard, IArcIDBondSlash {
             }
         }
 
-        _executeSlash(agent, consumer, reason, breachClass);
+        // keccak256(reason) is slash()'s only evidentiary hash — its ABI has
+        // no separate hash parameter (deliberately unchanged, see
+        // IArcIDBondSlash.sol), unlike fileIndictment()/recordSettlement().
+        // Dispute-resolution paths pass their own stored rationaleHash
+        // instead — see resolveDispute()/finalizeExpiredDispute() below.
+        _executeSlash(agent, consumer, reason, breachClass, keccak256(bytes(reason)));
     }
 
     /// @dev Shared by slash() (instant path) and resolveDispute() /
@@ -427,15 +443,22 @@ contract ArcIDBond is Ownable, ReentrancyGuard, IArcIDBondSlash {
     ///      exactly one place. This is the entire body of what slash() did
     ///      before Phase 6 — unchanged behavior, just callable from a
     ///      second entry point.
+    ///
+    ///      `evidenceHash` (Phase 8.2, post-submission — see CHANGELOG.md) is
+    ///      purely for the ERC-8004 reputation dual-write below — it does not
+    ///      affect fund movement or escalation bookkeeping in any way.
     function _executeSlash(
         address agent,
         address consumer,
         string memory reason,
-        BreachClass breachClass
+        BreachClass breachClass,
+        bytes32 evidenceHash
     ) internal returns (uint256 amount) {
         BondInfo storage b = bonds[agent];
         if (b.postedAt == 0) revert NoBondFound();
         if (b.slashed)       revert AlreadySlashed();
+
+        uint256 bondBeforeSlash = b.amount;
 
         (uint16 hardCount, uint16 semanticCount, bool epochExpired) = _epochCounts(agent);
 
@@ -474,6 +497,17 @@ contract ArcIDBond is Ownable, ReentrancyGuard, IArcIDBondSlash {
 
         emit AgentSlashed(agent, consumer, amount, reason);
         emit BreachClassified(agent, breachClass, amount, newCount, escalated);
+
+        // ERC-8004 reputation dual-write (Phase 8.2, post-submission — see
+        // CHANGELOG.md). try/catch here is load-bearing, not defensive
+        // boilerplate: an external registry failure (paused, unavailable,
+        // gas griefing) must never be able to revert a real slash. See the
+        // "Critical Invariants" section of CLAUDE.md.
+        if (reputationAdapter != address(0)) {
+            try IERC8004ReputationAdapter(reputationAdapter).reportSlash(
+                agent, amount, bondBeforeSlash, breachClass == BreachClass.Hard, evidenceHash
+            ) {} catch {}
+        }
     }
 
     /// @dev Used ONLY by resolveDispute()/finalizeExpiredDispute() — never
@@ -499,10 +533,11 @@ contract ArcIDBond is Ownable, ReentrancyGuard, IArcIDBondSlash {
         address agent,
         address consumer,
         string memory reason,
-        BreachClass breachClass
+        BreachClass breachClass,
+        bytes32 evidenceHash
     ) internal returns (uint256 amount) {
         if (bonds[agent].slashed) return 0;
-        return _executeSlash(agent, consumer, reason, breachClass);
+        return _executeSlash(agent, consumer, reason, breachClass, evidenceHash);
     }
 
     /// @dev Shared by slash() and previewSlash() so the two can never drift —
@@ -613,6 +648,13 @@ contract ArcIDBond is Ownable, ReentrancyGuard, IArcIDBondSlash {
         settledVerdicts[verdictHash] = true;
 
         emit PaymentSettled(agent, consumer, amount, verdictHash);
+
+        // ERC-8004 reputation dual-write (Phase 8.2, post-submission — see
+        // CHANGELOG.md). Same load-bearing try/catch reasoning as
+        // _executeSlash() above.
+        if (reputationAdapter != address(0)) {
+            try IERC8004ReputationAdapter(reputationAdapter).reportSettlement(agent, verdictHash) {} catch {}
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -731,7 +773,8 @@ contract ArcIDBond is Ownable, ReentrancyGuard, IArcIDBondSlash {
                 d.provider,
                 d.consumer,
                 "[DISPUTE APPROVED] see rationaleHash on IndictmentFiled event",
-                BreachClass.Semantic
+                BreachClass.Semantic,
+                d.rationaleHash
             );
         }
 
@@ -763,7 +806,8 @@ contract ArcIDBond is Ownable, ReentrancyGuard, IArcIDBondSlash {
             d.provider,
             d.consumer,
             "[DISPUTE AUTO-FINALIZED] see rationaleHash on IndictmentFiled event",
-            BreachClass.Semantic
+            BreachClass.Semantic,
+            d.rationaleHash
         );
 
         emit DisputeResolved(disputeId, true, amount, true);
@@ -853,5 +897,17 @@ contract ArcIDBond is Ownable, ReentrancyGuard, IArcIDBondSlash {
         challengeThreshold = _challengeThreshold;
         disputeWindow      = _disputeWindow;
         emit ChallengeParametersUpdated(_challengeThreshold, _disputeWindow);
+    }
+
+    /// @notice Set (or clear, via address(0)) the ERC-8004 reputation
+    ///         dual-write adapter (Phase 8.2, post-submission — see
+    ///         CHANGELOG.md). Deliberately not validated beyond being an
+    ///         address — every call into it is try/catch-wrapped at the
+    ///         call site regardless, so a wrong address here degrades to
+    ///         "every dual-write attempt fails silently," never a stuck
+    ///         slash/settlement.
+    function setReputationAdapter(address newAdapter) external onlyOwner {
+        emit ReputationAdapterUpdated(reputationAdapter, newAdapter);
+        reputationAdapter = newAdapter;
     }
 }

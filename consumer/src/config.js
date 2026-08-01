@@ -68,6 +68,14 @@ module.exports = {
   // written, just without the agentId field populated.
   REGISTRY_ADDRESS: process.env.REGISTRY_ADDRESS || "",
 
+  // ERC-8004 reputation dual-write (Phase 8.2, post-submission — see
+  // CHANGELOG.md). Optional. The oracle wallet's real agentId in Arc's
+  // ERC-8004 IdentityRegistry (see scripts/cli/register-8004-identity.js).
+  // Unset: erc8004.js skips the off-chain giveFeedback() write entirely,
+  // same "skip cleanly, don't invent a value" behavior as the on-chain
+  // adapter's own agentId8004 zero-check.
+  ORACLE_AGENT_ID_8004: process.env.ORACLE_AGENT_ID_8004 || "",
+
   // LLM
   ANTHROPIC_API_KEY: required("ANTHROPIC_API_KEY"),
   MODEL:             process.env.MODEL || "claude-sonnet-4-6",

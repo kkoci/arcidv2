@@ -30,6 +30,7 @@ const { executeSlash }          = require("./slasher");
 const { executeSettlement }     = require("./settlement");
 const { verifyDeterministic, logHardBreach } = require("./deterministicVerifier");
 const { computeVerdictHash }    = require("./slashGate");
+const { reportToERC8004, checkForOrphanedWrites } = require("./erc8004");
 
 // ---------------------------------------------------------------------------
 // CLI args
@@ -245,6 +246,40 @@ async function runCycle(cycleNumber) {
     }
   }
 
+  // ── 4.5 ERC-8004 reputation dual-write, off-chain EOA-direct (Phase 8.2 —
+  // see CHANGELOG.md and erc8004.js's own docstring for why this is a second,
+  // separate tx rather than atomic with the slash/settlement above). Only
+  // fires for a REAL on-chain event — never for simulated/skipped/gated
+  // outcomes, and (stated scope boundary, not silently unhandled) never for
+  // the "dispute" route, which resolves later via separate CLI tooling
+  // (scripts/cli/dispute-resolve.js) that does not yet call this either.
+  if (slashResult && slashResult.route === "instant" && !slashResult.simulated && slashResult.txHash) {
+    const erc8004Result = await reportToERC8004({
+      agentWallet:      config.ORACLE_WALLET_ADDRESS,
+      wasSlash:         true,
+      amountSlashed:    slashResult.amountSlashed,
+      bondBeforeSlash:  slashResult.bondBeforeSlash,
+      isHard:           verdict.tier === "deterministic",
+      evidenceHash:     slashResult.verdictHash,
+    });
+    if (erc8004Result.written) {
+      console.log(`  ${DIM}[8004] reputation feedback written — tx: ${erc8004Result.txHash}${RESET}`);
+    } else if (erc8004Result.error) {
+      console.log(`  ${DIM}[8004] reputation write failed (see erc8004_failures.jsonl): ${erc8004Result.error}${RESET}`);
+    }
+  } else if (settlementResult && settlementResult.settled && !settlementResult.simulated) {
+    const erc8004Result = await reportToERC8004({
+      agentWallet:  config.ORACLE_WALLET_ADDRESS,
+      wasSlash:     false,
+      evidenceHash: settlementResult.verdictHash,
+    });
+    if (erc8004Result.written) {
+      console.log(`  ${DIM}[8004] reputation feedback written — tx: ${erc8004Result.txHash}${RESET}`);
+    } else if (erc8004Result.error) {
+      console.log(`  ${DIM}[8004] reputation write failed (see erc8004_failures.jsonl): ${erc8004Result.error}${RESET}`);
+    }
+  }
+
   // ── 5. Log + push to oracle API ──────────────────────────────────────────
   const duration = Date.now() - cycleStart;
   record = {
@@ -273,6 +308,14 @@ async function runCycle(cycleNumber) {
     settlement_simulated:  settlementResult?.simulated ?? false,
     settlement_error:      settlementResult?.error ?? null,
     circuit_breaker_tripped: settlementResult?.circuitBreakerTripped ?? false,
+    // Phase 8.2 (post-submission — see CHANGELOG.md): the SAME hash that
+    // became this event's on-chain feedbackHash for the ERC-8004 reputation
+    // dual-write — keccak256(reason) for an instant slash, the dispute's
+    // rationaleHash for a disputed one, settlement.js's own verdictHash() for
+    // a clean settlement. null for any outcome that never reached chain
+    // (skipped, gated, DEV_MODE with no slash/settlement branch taken, etc).
+    // This is the oracle's GET /api/verdict/:verdictHash lookup key.
+    verdictHash:     slashResult?.verdictHash ?? settlementResult?.verdictHash ?? null,
     duration_ms:     duration,
   };
   logCycle(record);
@@ -296,6 +339,7 @@ async function runCycle(cycleNumber) {
 
 async function main() {
   printBanner();
+  checkForOrphanedWrites(); // Phase 8.2 — surface any crashed-mid-write from a prior run
 
   let cycleNumber = 1;
   let totalPayments = 0;

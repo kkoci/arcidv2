@@ -60,6 +60,7 @@ const BOND_ABI = [
   "function isActiveBondedAgent(address agent) external view returns (bool)",
   "function bonds(address) external view returns (uint256 amount, uint64 postedAt, bool slashed)",
   "event IndictmentFiled(uint256 indexed disputeId, address indexed agent, address indexed consumer, uint256 claimAmount, uint256 challengeDeadline, bytes32 rationaleHash)",
+  "event AgentSlashed(address indexed agent, address indexed consumer, uint256 amount, string reason)",
 ];
 
 const GUARD_ABI = [
@@ -113,7 +114,9 @@ async function executeSlash({ agentAddress, consumerAddress, reason, oracleRespo
         reason: "DEV_MODE — indictment simulated, not filed on-chain",
       });
     }
-    return { txHash: null, simulated: true, route };
+    // Phase 8.2 — same hash-selection logic as the real on-chain paths below,
+    // so DEV_MODE records carry a realistic verdictHash too.
+    return { txHash: null, simulated: true, route, verdictHash: route === "dispute" ? verdictHash : ethers.keccak256(ethers.toUtf8Bytes(reason)) };
   }
 
   const provider = config.getProvider();
@@ -126,6 +129,12 @@ async function executeSlash({ agentAddress, consumerAddress, reason, oracleRespo
     console.warn(`  [slash] WARNING: agent ${agentAddress} has no active bond — skipping slash`);
     return { txHash: null, simulated: false, skipped: true, route };
   }
+
+  // Phase 8.2 — captured BEFORE the slash tx so the off-chain ERC-8004 write
+  // (consumer/src/erc8004.js) can compute the same percentage-of-bond
+  // severity value the on-chain adapter would have, had the real registry
+  // allowed a contract-relayed call (see CHANGELOG.md's Phase 8.2 entry).
+  const bondBeforeSlash = (await bond.bonds(agentAddress)).amount;
 
   if (route === "dispute") {
     if (config.SESSION_GUARD_ADDRESS) {
@@ -152,7 +161,10 @@ async function executeSlash({ agentAddress, consumerAddress, reason, oracleRespo
       reason: `filed as disputeId=${disputeId} — pending challenge window`,
     });
 
-    return { txHash: receipt.hash, simulated: false, route: "dispute", disputeId };
+    // Phase 8.2 — this is the SAME hash stored as disputes[disputeId].rationaleHash,
+    // which resolveDispute()/finalizeExpiredDispute() later pass as the
+    // ERC-8004 dual-write's evidenceHash once the dispute resolves.
+    return { txHash: receipt.hash, simulated: false, route: "dispute", disputeId, verdictHash };
   }
 
   if (config.SESSION_GUARD_ADDRESS) {
@@ -175,13 +187,35 @@ async function executeSlash({ agentAddress, consumerAddress, reason, oracleRespo
 
     const tx      = await guard.guardedSlash(agentAddress, reason, breachClass);
     const receipt = await tx.wait();
-    return { txHash: receipt.hash, simulated: false, route: "instant" };
+    const amountSlashed = parseAgentSlashedAmount(bond, receipt);
+    // Phase 8.2 — same hash ArcIDBond's slash() computes internally
+    // (keccak256(reason)) for the ERC-8004 dual-write's feedbackHash.
+    return {
+      txHash: receipt.hash, simulated: false, route: "instant",
+      verdictHash: ethers.keccak256(ethers.toUtf8Bytes(reason)),
+      amountSlashed, bondBeforeSlash,
+    };
   }
 
   const tx      = await bond.connect(signer).slash(agentAddress, consumerAddress, reason, breachClass);
   const receipt = await tx.wait();
+  const amountSlashed = parseAgentSlashedAmount(bond, receipt);
 
-  return { txHash: receipt.hash, simulated: false, route: "instant" };
+  return {
+    txHash: receipt.hash, simulated: false, route: "instant",
+    verdictHash: ethers.keccak256(ethers.toUtf8Bytes(reason)),
+    amountSlashed, bondBeforeSlash,
+  };
+}
+
+/** Phase 8.2 — parse the real transferred amount from the AgentSlashed event,
+ *  rather than trusting previewSlash()'s pre-tx estimate (which could differ
+ *  in principle if state changed between preview and execution). */
+function parseAgentSlashedAmount(bond, receipt) {
+  const event = receipt.logs
+    .map((l) => { try { return bond.interface.parseLog(l); } catch { return null; } })
+    .find((e) => e && e.name === "AgentSlashed");
+  return event ? event.args.amount : null;
 }
 
 /**

@@ -557,6 +557,67 @@ table. The marketplace form submission (Phase 7.4's remaining blocker) is
 explicitly NOT part of this phase — separate task, pending the Phala CVM
 redeploy.
 
+ERC-8004 reputation dual-write (post-submission, arcid2 "Grant-Readiness
+Repositioning" doc, Phase 8.2 — see CHANGELOG.md):
+```
+contracts/ERC8004ReputationAdapter.sol         Thin adapter — value-scale math, agentId
+contracts/interfaces/IERC8004Reputation*.sol   mapping, try/catch around the external
+                                                registry call. Deployed + wired into
+                                                ArcIDBond.sol's _executeSlash()/
+                                                recordSettlement() (owner-settable
+                                                reputationAdapter, defaults to zero —
+                                                every existing test/deployment
+                                                unaffected until explicitly set).
+                                                LIVE-VERIFIED FINDING: the real
+                                                ReputationRegistry rejects contract-
+                                                relayed giveFeedback() calls (requires
+                                                tx.origin == msg.sender) — this on-chain
+                                                path is now a permanent, harmless
+                                                no-op against the real registry, kept
+                                                deployed/tested/forward-looking, NOT
+                                                the actual working write path.
+consumer/src/erc8004.js                        THE actual working write path — off-chain,
+                                                EOA-direct, a second transaction sent
+                                                right after slash()/recordSettlement()
+                                                confirms. Durable pending->confirmed/
+                                                failed ledger (erc8004_ledger.json) +
+                                                startup orphan-check
+                                                (checkForOrphanedWrites()) because this
+                                                is now two transactions that can diverge
+                                                — both live-verified, including the
+                                                crash-recovery path itself (a synthetic
+                                                "pending" entry was injected and
+                                                confirmed detected on next startup).
+                                                Scope boundary: only the instant
+                                                slash()/recordSettlement() path, NOT
+                                                fileIndictment()'s later dispute
+                                                resolution (scripts/cli/dispute-
+                                                resolve.js) — stated, not silently
+                                                unhandled.
+oracle/src/index.js                            GET /api/verdict/:verdictHash — the
+                                                feedbackURI target, serving the existing
+                                                verdicts buffer. Honest limitation in the
+                                                route's own comment: verdictHash isn't
+                                                unique per individual verdict (it's an
+                                                outcome-hash) — returns most recent
+                                                match, not a guaranteed 1:1 lookup.
+scripts/deploy_erc8004_adapter.js              Real, live-deployed to Arc Testnet this
+scripts/cli/register-8004-identity.js          phase: adapter at
+scripts/cli/set-8004-agent-id.js               0x42a7A56962cc3E990b2Ac5E506602277aB3aefC5,
+                                                oracle agentId 856872, consumer agentId
+                                                856873, both registered in Arc's real
+                                                IdentityRegistry.
+test/ERC8004ReputationAdapter.test.js          27 new tests (158 total) — value-scale
+                                                math, agentId-skip, try/catch at both
+                                                layers, dispute-path rationaleHash
+                                                threading.
+```
+Do not assume the on-chain adapter path works in production — it doesn't,
+against the real registry as currently deployed, confirmed by real
+transactions (not a guess). CHANGELOG.md's entry has the full evidence
+chain (direct-EOA success, contract-relay failure, spoofed-msg.sender
+isolation test) if this needs re-verifying after any future Arc change.
+
 ---
 
 ## ArcIDBond Contract Events
@@ -761,6 +822,7 @@ the test that proves the moat. It must always pass. Do not weaken the assertion.
 - A non-escalating Semantic breach whose computed amount exceeds `challengeThreshold` MUST NOT execute via `slash()` — it MUST revert `ChallengeThresholdExceeded` (post-submission Phase 6.1). The only paths to move funds for such a breach are `resolveDispute()` (owner-approved) or `finalizeExpiredDispute()` (deadline passed, unresolved). Hard breaches and any escalating breach are NEVER subject to this gate, at any size — enforced on-chain, not just by off-chain convention.
 - `resolveDispute()`/`finalizeExpiredDispute()` MUST recompute the slash amount fresh via `_computeSlashAmount()` at resolution time — never trust the `claimAmount` stored at indictment time. A bond-state change between indictment and resolution must be reflected in what actually transfers.
 - `finalizeExpiredDispute()` (permissionless) MUST NOT revert when the underlying agent was already fully slashed by an unrelated event before it's called — it MUST close the dispute out (`state = Resolved`, `DisputeResolved(id, true, 0, true)`) instead. Being permissionless is exactly why a revert here is unacceptable: there would be no one obligated to notice and clean it up. `resolveDispute(id, true)` MUST behave identically for the same reason. `resolveDispute(id, false)` (explicit rejection) is unaffected either way — it never touches the slash-execution path.
+- The ERC-8004 reputation dual-write (post-submission Phase 8.2 — see CHANGELOG.md) MUST NEVER be able to block or revert a real `slash()`/`recordSettlement()` call. Enforced at two independent layers, both proven by test: `ArcIDBond` wraps its call into `reputationAdapter` in `try {} catch {}`, and `ERC8004ReputationAdapter` separately wraps its own call into the external `ReputationRegistry` in `try {} catch {}`. A misbehaving, paused, or (as live-verified — see CHANGELOG.md) contract-relay-rejecting external registry degrades ONLY the reputation write, never the core trust mechanism.
 
 ---
 

@@ -1,0 +1,14 @@
+{
+  "oracle": {
+    "wallet": "0xe2F7a0E6d9865C7Dc9B5D19DCc11CBcb4655c661",
+    "agentId": "856872",
+    "txHash": "0xe607807ef0050db9cba7cb40da60cadfdb6a10209908182a7fa796233f779387",
+    "registeredAt": "2026-08-01T20:00:21.370Z"
+  },
+  "consumer": {
+    "wallet": "0xA6622e7E77ed0f63FeA527273418C267C1c70085",
+    "agentId": "856873",
+    "txHash": "0xe88b487afc32e8cdbd8482c848f47cbc3780bf7dbca629285e170dd9eb85e38c",
+    "registeredAt": "2026-08-01T20:00:31.370Z"
+  }
+}

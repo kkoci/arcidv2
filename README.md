@@ -91,6 +91,24 @@ The frontend's "Circle Gateway Nanopayment" card pays for one real `/api/price` 
 
 ---
 
+## ERC-8004 Reputation Dual-Write
+
+Post-submission, Phase 8.2 (see CHANGELOG.md) — arcid2 also writes into Arc's
+own agent-identity standard, ERC-8004, whose reputation registry deliberately
+excludes bonds/slashing from its scope. arcid2 is the module that fills that
+gap: every slash/settlement outcome also produces a real, externally-readable
+`giveFeedback()` entry.
+
+| Component | What's used |
+|---|---|
+| **Identity** | Oracle and consumer wallets both registered in Arc's real ERC-8004 IdentityRegistry (`0x8004A818BFB912233c491871b3d84c89A494BD9e`) — real agentIds (`856872` oracle, `856873` consumer), not placeholders. |
+| **Reputation write** | `giveFeedback()` on Arc's real ReputationRegistry (`0x8004B663056A597Dffe9eCcC1965A193B7388713`). Value is a real function of the same numbers ArcIDBond already computes — the negative percentage of bond slashed, or 100 for a clean settlement. |
+| **Path** | **Off-chain, EOA-direct** (`consumer/src/erc8004.js`), not on-chain — live-verified that the real registry rejects contract-relayed `giveFeedback()` calls (requires `tx.origin == msg.sender`); a same-transaction on-chain dual-write (`contracts/ERC8004ReputationAdapter.sol`, still deployed and wired into `ArcIDBond.sol`) is kept as a harmless, forward-looking no-op. See CHANGELOG.md's full entry for the evidence. |
+| **Crash safety** | A durable pending→confirmed/failed ledger plus a startup orphan-check, since the off-chain write is now a second transaction that can diverge from the slash/settlement it describes. Live-verified, including the crash-recovery path itself. |
+| **feedbackURI** | `GET /api/verdict/:verdictHash` (new oracle route) — serves the existing structured evidence/rationale as JSON. |
+
+---
+
 ## Quick Start (3 terminals)
 
 ```bash
