@@ -660,6 +660,20 @@ afterward the test slash did NOT escalate/blacklist the oracle's bond
 (normal 10% Hard-cap proportional slash, matching Phase 4's existing
 math unchanged).
 
+Intended mainnet Agent Wallet spend policy (post-submission, arcid2
+"Grant-Readiness Repositioning" doc, Phase 8.4 — see CHANGELOG.md):
+doc-only, no code. Re-verified live (not carried forward from Phase 7.2's
+memory) that `circle wallet limit` is still mainnet-only — the CLI's own
+`--help` now states "testnets not supported" outright, and a real call
+against Arc Testnet returns `"Policy limits are only available on mainnet
+chains"`. README.md's new "Intended Mainnet Agent Wallet Spend Policy"
+section specifies both a `contract-allowlist` (mirrors
+`ConsumerSessionKeyGuard.sol`'s fixed-target design) and `transfer-limit`
+caps derived directly from `ArcIDBond`'s live slash-schedule constants —
+not arbitrary numbers. Explicitly a forward-looking spec: Agent Wallets
+remain custody/balance-check only today (Phase 7.2's decision, unchanged);
+the guard contract is still the sole signer.
+
 Unbonded-agent gating + grant metrics dashboard (post-submission, arcid2
 "Grant-Readiness Repositioning" doc, Phase 8.5 — see CHANGELOG.md):
 ```

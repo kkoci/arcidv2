@@ -86,8 +86,55 @@ The oracle's payment path is wired to Circle's real infrastructure, not a mocked
 | **Seller Wallet** | The oracle's wallet (`0xe2F7a0E6d9865C7Dc9B5D19DCc11CBcb4655c661`) is the Gateway seller — receives $0.001 USDC per call, checkable live via `GET /api/gateway-balance`. |
 | **Circle Agent Wallets** | Post-submission Phase 7.2 (see CHANGELOG.md) — provisioned via `@circle-fin/cli` (`circle wallet login` + `circle wallet create`), scoped to USDC custody/balance-checks only. Oracle: `0x9867a0a4b7631a66b0433034a45e472023f809d6`. Consumer: `0xb84cd0e18a75dd89e6f7e2781012748f612d13c3`. **Not** used for signing — `postBond`/`slash`/`fileIndictment`/`resolveDispute` remain on the existing raw-key + `ConsumerSessionKeyGuard` path. The two wallets are on two different Circle accounts (`kristian.koci@gmail.com` for the oracle, `kristian.koci@feeltech.co.uk` for the consumer) — a CLI-driven balance check needs `circle wallet login` for whichever account owns the wallet being queried. |
 | **Circle Agent Marketplace** | Post-submission Phase 7.4 (see `MARKETPLACE_LISTING.md` + CHANGELOG.md) — listing package prepared in Circle's real schema (reverse-engineered from live `circle services search --output json` listings), framed around the trust-layer pitch rather than just "price feed." **Not yet submitted** — Circle's own listing intake is a Google Form, not a self-serve API, and the Phala CVM oracle URL is currently unreachable (re-verified this session), so the required live health-check/402-evidence can't be demonstrated yet. |
+| **Agent Wallet Spend Policies** | Post-submission Phase 8.4 (see CHANGELOG.md) — **undemoed on testnet by Circle's own product constraint, not an arcid2 gap**: `circle wallet limit`'s own `--help` states outright "Mainnet blockchain (required; testnets not supported)", and calling it against Arc Testnet returns `"Policy limits are only available on mainnet chains."` (re-confirmed live this phase, not assumed from Phase 7.2's memory). The intended mainnet configuration is specified below, calibrated to tell the same economic story as `ArcIDBond`'s own on-chain slash caps, not an arbitrary number. |
 
 The frontend's "Circle Gateway Nanopayment" card pays for one real `/api/price` call and shows the seller's Gateway balance before → after.
+
+---
+
+## Intended Mainnet Agent Wallet Spend Policy
+
+Post-submission, Phase 8.4 (see CHANGELOG.md). Circle's Agent Wallet spend
+policies are mainnet-only by Circle's own product design — re-confirmed
+live this phase (`circle wallet limit --help` states it outright; the CLI
+rejects Arc Testnet with `"Policy limits are only available on mainnet
+chains"`). Nothing to demo here on testnet; what follows is the exact
+configuration arcid2 would apply the day it runs on a mainnet chain,
+derived from numbers that already exist — not invented for this doc.
+
+**Two rule types, not just an amount cap** (`circle wallet limit set
+--rule-type ...`) — Circle's policy primitive is richer than a single
+spend ceiling:
+
+| Rule | Config | Why this number, not an arbitrary one |
+|---|---|---|
+| `contract-allowlist` | Restrict the wallet to `ArcIDBond`'s address only | Mirrors `ConsumerSessionKeyGuard.sol`'s existing on-chain invariant — a fixed target contract, no general-purpose `execute(target, data)` escape hatch — at the wallet-custody layer too. Defense in depth: the guard already enforces this on-chain; the wallet policy would enforce the same fact independently, so a bug in one layer isn't the only thing standing between a leaked key and an arbitrary contract call. |
+| `transfer-limit` | See table below | Calibrated directly from `ArcIDBond`'s live slash-schedule constants (`hardCapBps=1000`, `semanticCapBps=100`, `semanticFeeMultiple=100`, `serviceFeeAtomic=$0.001`), not a round number picked for looks. |
+
+**`transfer-limit` caps, worked from the current $5.00 bond default**
+(the formula scales with any bond size — `bondSize × hardCapBps / 10000`
+for the per-tx figure):
+
+| Cap | Formula | Value on a $5.00 bond | Reasoning |
+|---|---|---|---|
+| `--per-tx` | `bondSize × hardCapBps ÷ 10000` | **$0.50** | The largest amount a single non-escalating slash can ever move (Hard breach, 10% of remaining bond — the larger of the two classes; Semantic's cap is `min(1% bond, k×fee)` = $0.05 on this bond, always smaller). A wallet-level policy above this figure adds no protection; below it would block legitimate slash payouts. |
+| `--daily` | `bondSize × 1` | **$5.00** | The absolute ceiling of what should ever leave in one day even in the worst case — a full-bond-drain escalation (`hardEscalationThreshold=3` or `semanticEscalationThreshold=5` breaches inside one rolling 24h window) takes the entire remaining bond in that single call. Nothing legitimate should ever need to exceed 100% of the bond in a day. |
+| `--weekly` | `bondSize × 2` | **$10.00** | Headroom above the daily ceiling for legitimate settlement-payment volume (`recordSettlement()` on every clean verdict) accumulating across a week, on top of — not instead of — the slash-side worst case. |
+| `--monthly` | `bondSize × 6` | **$30.00** | Same reasoning as weekly, scaled out; loose enough not to trip on real traffic, tight enough that a monthly total anywhere near a full bond's worth of *slash* volume alone would already indicate something worth a human looking at. |
+
+(`per-tx ≤ daily ≤ weekly ≤ monthly` is a hard ordering constraint Circle's
+CLI itself enforces — the table above already satisfies it.)
+
+**What this would actually gate, stated honestly:** as of Phase 7.2's own
+explicit decision, Agent Wallets are custody/balance-check only — they do
+not sign `postBond`/`slash`/`fileIndictment`/`resolveDispute` today, and
+`ConsumerSessionKeyGuard.sol` remains the sole on-chain authority for
+those calls. This configuration describes what arcid2 would apply *if and
+when* an Agent Wallet became the actual signing custody for outbound
+payments on mainnet — a forward-looking specification, not a currently-
+wired integration. No code changes this phase; the on-chain guard already
+provides the testnet-testable version of the same idea (fixed target,
+capped amount) today.
 
 ---
 
