@@ -2,9 +2,11 @@
 
 **Lepton Agents Hackathon · Canteen × Circle × Arc**
 
-> Agents post a bond to register with ArcID. A consumer agent *reasons* — using Claude — whether the provider delivered. On a confirmed breach, the bond slashes automatically and pays the consumer. **Reputation is capital at risk, not a score.**
+> **arcid2 is the bonded economic-security module for Arc's agentic economy:** TEE-attested agents post USDC/USYC collateral, sell via Circle Nanopayments/x402, and face tiered slashing — writing outcomes into ERC-8004 reputation and plugging into ERC-8183 evaluation.
 
-Addresses Lepton's **Prior Art #8** (bonded agent reputation) and **RFB 3** (agent-to-agent nanopayment networks). The trust layer Prior Art #8 called "nearly empty" — this fills it.
+Concretely: agents post a bond to register with ArcID. A consumer agent *reasons* — using Claude — whether the provider delivered. On a confirmed breach, the bond slashes automatically and pays the consumer. **Reputation is capital at risk, not a score.**
+
+Addresses Lepton's **Prior Art #8** (bonded agent reputation) and **RFB 3** (agent-to-agent nanopayment networks). Arc's own agent-identity standard, **ERC-8004**, explicitly excludes bonds and slashing from its scope ("incentives and slashing... are outside the scope of this registry") — arcid2 is the module that fills exactly that gap, writing real slash/settlement outcomes back into ERC-8004's ReputationRegistry rather than competing with or replacing it.
 
 > **Transparency note:** the submission form locked 2026-07-06. Payment
 > execution on a clean verdict (real Circle Gateway settlement +
