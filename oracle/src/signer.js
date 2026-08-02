@@ -31,4 +31,26 @@ async function signResponse(value, timestamp) {
   return wallet.signMessage(ethers.getBytes(messageHash));
 }
 
-module.exports = { signResponse, wallet };
+/**
+ * Phase 8.3 (post-submission — see CHANGELOG.md): signs the richer "premium
+ * oracle analysis" payload sold through the ERC-8183 job flow (a genuinely
+ * separate, higher-priced service tier — NOT the same $0.001 price feed
+ * signed above). Message hash doubles as the ERC-8183 `deliverable` bytes32
+ * submitted on-chain via submit() — the evaluator independently recomputes
+ * this same hash from the fetched payload and compares against the
+ * JobSubmitted event, the same "hash the evidence, verify no tampering"
+ * pattern this project uses everywhere else (verdictHash, rationaleHash).
+ *
+ * @param {{value:string, timestamp:number, trend:string, sma:string, volatilityBps:number}} p
+ * @returns {Promise<{signature:string, deliverableHash:string}>}
+ */
+async function signPremiumAnalysis(p) {
+  const deliverableHash = ethers.solidityPackedKeccak256(
+    ["string", "uint256", "string", "string", "uint256"],
+    [String(p.value), BigInt(p.timestamp), p.trend, String(p.sma), BigInt(p.volatilityBps)]
+  );
+  const signature = await wallet.signMessage(ethers.getBytes(deliverableHash));
+  return { signature, deliverableHash };
+}
+
+module.exports = { signResponse, signPremiumAnalysis, wallet };

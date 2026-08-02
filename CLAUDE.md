@@ -618,6 +618,48 @@ transactions (not a guess). CHANGELOG.md's entry has the full evidence
 chain (direct-EOA success, contract-relay failure, spoofed-msg.sender
 isolation test) if this needs re-verifying after any future Arc change.
 
+ERC-8183 premium job flow (post-submission, arcid2 "Grant-Readiness
+Repositioning" doc, Phase 8.3 — see CHANGELOG.md):
+```
+oracle/src/signer.js                    signPremiumAnalysis() — separate signing
+                                         function from signResponse() (different
+                                         payload shape); the message hash doubles
+                                         as ERC-8183's `deliverable` bytes32.
+oracle/src/index.js                     POST /api/premium-analysis (generate+sign+
+                                         cache by jobId) + GET /api/premium-analysis/:jobId.
+                                         Neither is x402-gated — payment is the job's
+                                         own escrow, a SEPARATE mechanism from the
+                                         existing $0.001 price feed, never both for
+                                         one call.
+oracle/src/config.js                    PREMIUM_PRICE_USDC — default 0.05 (50x the
+                                         price feed), the user's explicit call.
+scripts/cli/demo-erc8183-job.js         npm run demo:premium-job — the full 8-step
+                                         live cycle against Arc's real AgenticCommerce
+                                         contract (proxy 0x0747EEf0706327138c69792bF28Cd525089e4583,
+                                         impl 0xA316fd02827242D537F84730F8a37D0BA5fd351a —
+                                         verified via the block explorer before writing
+                                         any integration code, NOT the blog-summary ABI
+                                         Phase 8.1 only had). On a confirmed HARD breach
+                                         (bad sig / hash mismatch) during evaluation,
+                                         ALSO calls the existing, unmodified
+                                         ArcIDBond.slash() — composition: the job escrow
+                                         and the bond collateral are two separate pools
+                                         of funds, a refund from one is not a substitute
+                                         for the other reacting to the same breach.
+```
+Real key findings, confirmed not assumed: the ERC-8183 address is a proxy
+(implementation is the real ABI source); `setBudget()` is provider-only,
+not client — the SELLER names the price; `fund()` requires standard
+ERC-20 `approve()`, no permit; the `Job` struct does not store the
+submitted `deliverable` — only the `JobSubmitted` event does, so the
+evaluator must read the event. Both the clean (`complete()`) and fault
+(`reject()` + real `bond.slash()`) paths were live-verified end to end
+against Arc Testnet on the first attempt — no docs-vs-reality surprise
+this time (contrast with Phase 8.2's ERC-8004 finding). Confirmed
+afterward the test slash did NOT escalate/blacklist the oracle's bond
+(normal 10% Hard-cap proportional slash, matching Phase 4's existing
+math unchanged).
+
 Unbonded-agent gating + grant metrics dashboard (post-submission, arcid2
 "Grant-Readiness Repositioning" doc, Phase 8.5 — see CHANGELOG.md):
 ```

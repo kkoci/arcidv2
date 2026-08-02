@@ -13,11 +13,15 @@
  * Endpoints (x402 payment required):
  *   GET  /api/price           — signed price response; uses activeFaultMode if set
  *   GET  /api/price?fault=X   — override fault for this call only
+ *
+ * Endpoints (paid via ERC-8183 job escrow instead of x402 — Phase 8.3):
+ *   POST /api/premium-analysis        — generate + sign + cache a premium analysis for a jobId
+ *   GET  /api/premium-analysis/:jobId — fetch the cached payload (evaluator's feedbackURI-equivalent)
  */
 
 const express    = require("express");
 const config     = require("./config");
-const { signResponse } = require("./signer");
+const { signResponse, signPremiumAnalysis } = require("./signer");
 const { getChainStats, triggerCycle, getGatewayBalance, payForPriceViaGateway, isRegisteredAgent } = require("./chain");
 const { getAttestation } = require("./attest");
 
@@ -249,6 +253,77 @@ app.get("/api/verdict/:verdictHash", (req, res) => {
   res.json(match);
 });
 
+// ── ERC-8183 premium job flow (Phase 8.3, post-submission — see
+// CHANGELOG.md) ──────────────────────────────────────────────────────────
+//
+// A genuinely separate, higher-value service tier — "premium oracle
+// analysis" ($0.05 default, 50x the $0.001 price feed) — sold through
+// Arc's real ERC-8183 job/escrow/evaluator contract instead of x402/
+// Nanopayments. One real payment per mechanism: this is NOT charged
+// alongside the existing /api/price call, and does not touch it.
+//
+// Cached in-memory by jobId (small map, not a rolling buffer — a demo-scale
+// number of concurrent jobs) so the payload generated for submit()'s
+// deliverable hash is the EXACT same payload later served to the
+// evaluator, not regenerated (prices/trend are randomized per call).
+const premiumAnalyses = {};
+
+function generatePremiumAnalysis() {
+  // Small synthetic rolling window (this call only — not persisted across
+  // calls) to derive trend/sma/volatility. Demo-scale, not a real
+  // analytics engine — reuses the exact same generatePrice() the base
+  // price feed already uses, just sampled a few times.
+  const WINDOW = 5;
+  const samples = Array.from({ length: WINDOW }, () => parseFloat(generatePrice()));
+  const value = samples[samples.length - 1];
+  const sma = samples.reduce((a, b) => a + b, 0) / samples.length;
+  const trend = value > samples[0] ? "up" : value < samples[0] ? "down" : "flat";
+  const variance = samples.reduce((acc, s) => acc + (s - sma) ** 2, 0) / samples.length;
+  const volatilityBps = Math.round((Math.sqrt(variance) / sma) * 10_000);
+
+  return {
+    value: value.toFixed(2),
+    timestamp: Math.floor(Date.now() / 1000),
+    trend,
+    sma: sma.toFixed(2),
+    volatilityBps,
+  };
+}
+
+// Generates, signs, and caches a premium analysis for a job. Called by
+// whoever is acting as the job's provider (see scripts/cli/demo-erc8183-
+// job.js) right before submit()-ing the deliverable hash on-chain.
+app.post("/api/premium-analysis", async (req, res) => {
+  const { jobId, fault } = req.body || {};
+  if (jobId === undefined) return res.status(400).json({ error: "jobId required" });
+
+  let analysis = generatePremiumAnalysis();
+
+  // Demo-only fault injection (mirrors /api/price?fault=), so the
+  // reject()+slash composition path is demoable on command, same as
+  // demo:hard-breach/demo:semantic-breach.
+  let signature, deliverableHash;
+  if (fault === "bad-sig") {
+    ({ deliverableHash } = await signPremiumAnalysis(analysis));
+    signature = "0x" + "ab".repeat(32) + "cd".repeat(32) + "01"; // structurally valid, wrong signer
+  } else {
+    ({ signature, deliverableHash } = await signPremiumAnalysis(analysis));
+  }
+
+  const payload = { ...analysis, oracle: config.ORACLE_WALLET_ADDRESS, signature };
+  premiumAnalyses[jobId] = payload;
+
+  res.json({ payload, deliverableHash });
+});
+
+app.get("/api/premium-analysis/:jobId", (req, res) => {
+  const payload = premiumAnalyses[req.params.jobId];
+  if (!payload) {
+    return res.status(404).json({ error: "No premium analysis generated for this jobId yet — call POST /api/premium-analysis first." });
+  }
+  res.json(payload);
+});
+
 // TDX DCAP attestation quote for this oracle instance
 // USE_REAL_PHALA=true  → real quote from Phala dstack (CVM only)
 // USE_REAL_PHALA=false → prototype quote, self-signed (local dev)
@@ -469,7 +544,9 @@ app.listen(config.PORT, () => {
   console.log(`    GET  /api/attest            (TDX DCAP quote — real if USE_REAL_PHALA=true)`);
   console.log(`    GET  /api/chain-stats       (on-chain bond + agent state)`);
   console.log(`    GET  /api/gateway-balance   (Circle Gateway seller USDC balance)`);
-  console.log(`    GET  /api/price             (x402-gated — Circle Gateway in prod)\n`);
+  console.log(`    GET  /api/price             (x402-gated — Circle Gateway in prod)`);
+  console.log(`    POST /api/premium-analysis  (ERC-8183 job flow — $${config.PREMIUM_PRICE_USDC} tier, not x402)`);
+  console.log(`    GET  /api/premium-analysis/:jobId\n`);
   console.log(`  Attestation: USE_REAL_PHALA=${config.USE_REAL_PHALA}${config.USE_REAL_PHALA ? " (dstack Unix socket, auto-probed by @phala/dstack-sdk)" : ""}`);
 });
 

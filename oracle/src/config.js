@@ -15,6 +15,12 @@ module.exports = {
 
   // x402 payment config
   PRICE_USDC:    process.env.PRICE_USDC    || "0.001",
+
+  // ERC-8183 premium job flow (Phase 8.3, post-submission — see CHANGELOG.md).
+  // A genuinely separate, higher-value service tier sold through the job/
+  // escrow/evaluator flow, NOT the same $0.001 Nanopayments price feed above.
+  // One real payment per mechanism — never charged alongside the x402 price.
+  PREMIUM_PRICE_USDC: process.env.PREMIUM_PRICE_USDC || "0.05",
   ARC_NETWORK:   process.env.ARC_NETWORK   || "arc-testnet",
   FACILITATOR_URL: process.env.FACILITATOR_URL || "https://x402.org/facilitator",
 

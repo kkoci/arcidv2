@@ -109,6 +109,23 @@ gap: every slash/settlement outcome also produces a real, externally-readable
 
 ---
 
+## ERC-8183 Premium Job Flow
+
+Post-submission, Phase 8.3 (see CHANGELOG.md). A second, genuinely separate,
+higher-value service tier — **"premium oracle analysis," $0.05 USDC** (50x
+the $0.001 price feed) — sold through Arc's real job/escrow/evaluator
+contract instead of x402/Nanopayments. One real payment per mechanism: this
+never touches or duplicates the existing price feed's own payment.
+
+| Component | What's used |
+|---|---|
+| **Job contract** | `AgenticCommerce` on Arc Testnet — proxy `0x0747EEf0706327138c69792bF28Cd525089e4583`, implementation `0xA316fd02827242D537F84730F8a37D0BA5fd351a` (verified via Arc's block explorer before writing any integration code). |
+| **Flow** | `createJob()` (client=consumer) → `setBudget()` (provider=oracle sets its own price) → approve + `fund()` (client escrows) → oracle generates + signs a real analysis payload, served live over HTTP → `submit()` (provider, the payload's hash as `deliverable`) → evaluator (consumer) independently re-verifies the hash, signature, freshness, and `ArcIDBond.isActiveBondedAgent()` → `complete()` (release) or `reject()` (full refund). |
+| **Composition, not duplication** | On a confirmed **hard** breach (bad signature or hash mismatch) discovered during evaluation, the demo **also** calls the existing, unmodified `ArcIDBond.slash()` — a separate pool of funds (the oracle's bond collateral) reacting to the same breach, not a second payment for the same job. |
+| **Demo** | `npm run demo:premium-job` (clean path) / `npm run demo:premium-job -- --fault bad-sig` (reject + slash composition path) — both live-verified end to end on Arc Testnet, real transactions, first attempt succeeded both ways. See CHANGELOG.md for the full transaction record. |
+
+---
+
 ## Marketplace Gating + Grant Metrics
 
 Post-submission, Phase 8.5 (see CHANGELOG.md). Two dashboard/aggregation

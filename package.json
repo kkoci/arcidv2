@@ -24,6 +24,7 @@
     "deploy:erc8004-adapter:local": "hardhat run scripts/deploy_erc8004_adapter.js --network hardhat",
     "bond:register-identity":    "node scripts/cli/register-8004-identity.js",
     "bond:set-8004-agent-id":    "node scripts/cli/set-8004-agent-id.js",
+    "demo:premium-job":          "node scripts/cli/demo-erc8183-job.js",
     "agent:register":     "node scripts/cli/register.js",
     "agent:status":       "node scripts/cli/status.js",
     "agent:list":         "node scripts/cli/list-agents.js",
