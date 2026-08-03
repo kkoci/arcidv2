@@ -1,12 +1,10 @@
 # ArcID v2 — Bonded Agent Reputation for Nanopayment Networks
 
-**Lepton Agents Hackathon · Canteen × Circle × Arc**
-
 > **arcid2 is the bonded economic-security module for Arc's agentic economy:** TEE-attested agents post USDC/USYC collateral, sell via Circle Nanopayments/x402, and face tiered slashing — writing outcomes into ERC-8004 reputation and plugging into ERC-8183 evaluation.
 
 Concretely: agents post a bond to register with ArcID. A consumer agent *reasons* — using Claude — whether the provider delivered. On a confirmed breach, the bond slashes automatically and pays the consumer. **Reputation is capital at risk, not a score.**
 
-Addresses Lepton's **Prior Art #8** (bonded agent reputation) and **RFB 3** (agent-to-agent nanopayment networks). Arc's own agent-identity standard, **ERC-8004**, explicitly excludes bonds and slashing from its scope ("incentives and slashing... are outside the scope of this registry") — arcid2 is the module that fills exactly that gap, writing real slash/settlement outcomes back into ERC-8004's ReputationRegistry rather than competing with or replacing it.
+Addresses bonded agent reputation and agent-to-agent nanopayment networks. Arc's own agent-identity standard, **ERC-8004**, explicitly excludes bonds and slashing from its scope ("incentives and slashing... are outside the scope of this registry") — arcid2 is the module that fills exactly that gap, writing real slash/settlement outcomes back into ERC-8004's ReputationRegistry rather than competing with or replacing it.
 
 > **Transparency note:** the submission form locked 2026-07-06. Payment
 > execution on a clean verdict (real Circle Gateway settlement +
@@ -1084,14 +1082,14 @@ model this contract does not cover.
 
 ---
 
-## Judging Alignment
+## Capability Summary
 
-| Criterion (weight) | How ArcID v2 addresses it |
+| Area | How arcid2 addresses it |
 |--------------------|---------------------------|
-| **Agentic Sophistication (30%)** | Consumer agent uses Claude `tool_use` with forced structured output to reason about *why* a failure is a breach vs a transport blip. Three fault modes give genuinely different reasoning paths. Written rationale logged on-chain. `uncertain` verdict on ambiguous failures demonstrates restraint — the agent knows when not to slash. |
-| **Traction (30%)** | DCAP-verified agents registered on-chain via `ArcIDRegistryV2`; real x402 nanopayment volume on Arc testnet; outside participants recruited. Every cycle is logged to JSONL — traction is auditable, not claimed. |
-| **Circle Tool Usage (20%)** | **x402 Gateway:** oracle charges $0.001/call, consumer pays autonomously. **USYC collateral:** bond deployed with Hashnote's yield-bearing token; Teller integration for USDC→USYC mint. Both used together. |
-| **Innovation (20%)** | First system where TEE-attested identity gates the bond *before* stake (not stake as identity), and where bond collateral earns T-bill yield while at risk. No adjacent project has both properties. |
+| **Agentic reasoning** | Consumer agent uses Claude `tool_use` with forced structured output to reason about *why* a failure is a breach vs a transport blip. Three fault modes give genuinely different reasoning paths. Written rationale logged on-chain. `uncertain` verdict on ambiguous failures demonstrates restraint — the agent knows when not to slash. |
+| **Traction** | DCAP-verified agents registered on-chain via `ArcIDRegistryV2`; real x402 nanopayment volume on Arc testnet; outside participants recruited. Every cycle is logged to JSONL — traction is auditable, not claimed. |
+| **Circle tool usage** | **x402 Gateway:** oracle charges $0.001/call, consumer pays autonomously. **USYC collateral:** bond deployed with Hashnote's yield-bearing token; Teller integration for USDC→USYC mint. Both used together. |
+| **Innovation** | First system where TEE-attested identity gates the bond *before* stake (not stake as identity), and where bond collateral earns T-bill yield while at risk. No adjacent project has both properties. |
 
 ---
 
@@ -1167,4 +1165,3 @@ curl https://<cvm-hash>-3001.dstack-pha-prod5.phala.network/api/attest | jq .rea
 
 - Live frontend: [frontend-five-eta-43.vercel.app](https://frontend-five-eta-43.vercel.app)
 - Arc testnet explorer: [testnet.arcscan.app](https://testnet.arcscan.app)
-- Lepton submission: [forms.gle/SMqLaw2pMGDe58LFA](https://forms.gle/SMqLaw2pMGDe58LFA)

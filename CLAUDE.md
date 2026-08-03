@@ -8,9 +8,6 @@ x402 nanopayments. A consumer agent uses LLM-reasoned adjudication to decide whe
 the service was delivered — on confirmed breach, the bond slashes automatically and
 pays the consumer. Reputation is capital at risk, not a score.
 
-**Submission:** Lepton Agents Hackathon (Canteen × Circle × Arc)
-**Judging weights:** 30% Agentic Sophistication · 30% Traction · 20% Circle Tools · 20% Innovation
-
 ---
 
 ## Context Loading Order
@@ -825,17 +822,6 @@ the test that proves the moat. It must always pass. Do not weaken the assertion.
 | 5 | USYC yield-bearing collateral — MockUSYC, ITeller, 13 new tests | ✅ Complete |
 | 6 | Video script, submission form answers, pre-submit checklist | ✅ Complete → SUBMISSION.md |
 | 7 | Phala Cloud (TDX CVM) + Vercel deploy + frontend visual overhaul | ✅ Complete |
-
----
-
-## Judging Weights (keep front-of-mind on every decision)
-
-| Axis | Weight | How to maximize |
-|------|--------|----------------|
-| Agentic Sophistication | 30% | Phase 3 LLM adjudication is the cut line. **Never cut the reasoning step.** |
-| Traction | 30% | Real non-self volume. Recruit outside agents from Day 0. |
-| Circle Tool Usage | 20% | x402 Gateway payments + USYC yield collateral. |
-| Innovation | 20% | TEE-gated identity + USYC yield bonds = unique combination. |
 
 ---
 
