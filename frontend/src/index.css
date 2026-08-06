@@ -85,3 +85,7 @@ a { color: inherit; }
 .mono { font-family: 'JetBrains Mono', monospace; }
 
 .slide-in { animation: slideIn .4s ease both; }
+
+/* Glossary hint — dotted underline signals "hover for explanation" on jargon
+   (bond, slash, SLA, etc.) without needing a JS tooltip library. */
+.hint { border-bottom: 1px dotted rgba(242,240,255,.35); cursor: help; }

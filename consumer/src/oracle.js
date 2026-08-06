@@ -2,17 +2,29 @@
  * oracle.js — x402-aware oracle client.
  *
  * Flow:
- *   1. GET /api/price → 402 with payment options
- *   2. In DEV_MODE: send any X-Payment header value (oracle accepts it).
- *      In production: pay via Circle Gateway and include the receipt.
- *   3. GET /api/price with X-Payment → 200 with {value, timestamp, oracle, signature, sla}
+ *   DEV_MODE=true:  GET /api/price → 402 → retry with a dev-stub X-Payment
+ *                   header (oracle's devX402Middleware accepts any non-empty
+ *                   value, no real funds move).
+ *   DEV_MODE=false: pay via Circle Gateway (GatewayClient.pay() — same client
+ *                   used by settlement.js/oracle chain.js's
+ *                   payForPriceViaGateway()) and let it handle the full
+ *                   402/PAYMENT-REQUIRED/Payment-Signature handshake.
  *
- * Throws on non-200/402 status codes or network errors.
+ * NOTE: which branch runs is decided ONLY by this consumer's own DEV_MODE —
+ * not by whether the oracle URL happens to be localhost. A local oracle can
+ * (and must, for this branch to work) also run DEV_MODE=false — its
+ * /api/price route then serves the real Circle Gateway middleware
+ * (see oracle/src/index.js's loadProdX402()), which speaks a completely
+ * different protocol (PAYMENT-REQUIRED header + Payment-Signature) than the
+ * dev stub's X-Payment header. The two are mutually unintelligible, so both
+ * sides must agree on DEV_MODE together, even for local testing.
+ *
+ * Throws on non-200/402 status codes, network errors, or a failed Gateway payment.
  */
 
 const config = require("./config");
 
-const PAYMENT_AMOUNT_USDC = 0.001; // $0.001 per call
+const PAYMENT_AMOUNT_USDC = parseFloat(config.PRICE_USDC);
 
 /**
  * Fetch a signed price from the oracle, paying via x402.
@@ -23,7 +35,10 @@ async function fetchOraclePrice(faultMode = null) {
     ? `${config.ORACLE_URL}/api/price?fault=${faultMode}`
     : `${config.ORACLE_URL}/api/price`;
 
-  // --- First attempt: expect 402 ---
+  return config.DEV_MODE ? fetchDevMode(url) : fetchViaGateway(url);
+}
+
+async function fetchDevMode(url) {
   let res;
   try {
     res = await fetch(url);
@@ -41,16 +56,16 @@ async function fetchOraclePrice(faultMode = null) {
     throw new Error(`Oracle returned unexpected status ${res.status}`);
   }
 
-  // Parse payment requirements from 402 body
-  const paymentOptions = await res.json();
+  await res.json(); // 402 payment-options body — unused by the dev stub
 
-  // --- Pay and retry ---
-  const paymentHeader = await buildPaymentHeader(paymentOptions);
-
-  const paidRes = await fetch(url, {
-    headers: { "X-Payment": paymentHeader },
+  const paymentHeader = JSON.stringify({
+    scheme:  "exact",
+    network: "dev",
+    payload: "dev-payment-" + Date.now(),
+    payer:   config.CONSUMER_WALLET_ADDRESS,
   });
 
+  const paidRes = await fetch(url, { headers: { "X-Payment": paymentHeader } });
   if (!paidRes.ok) {
     const body = await paidRes.text();
     throw new Error(`Oracle rejected payment (${paidRes.status}): ${body}`);
@@ -60,34 +75,24 @@ async function fetchOraclePrice(faultMode = null) {
   return { response: body, paymentAmount: PAYMENT_AMOUNT_USDC };
 }
 
-/**
- * Build the X-Payment header value.
- * DEV_MODE: a dev-only stub accepted by the oracle's dev middleware.
- * Production: would call Circle Gateway and return the signed receipt.
- */
-async function buildPaymentHeader(paymentOptions) {
-  const isLocalOracle =
-    config.ORACLE_URL.includes("localhost") ||
-    config.ORACLE_URL.includes("127.0.0.1");
+// Real Circle Gateway Nanopayment — moves real testnet USDC from
+// CONSUMER_WALLET_ADDRESS to the oracle's Gateway seller address. Requires
+// the consumer's Gateway balance to already be funded/deposited (see
+// oracle/src/chain.js's payForPriceViaGateway() for the deposit-if-needed
+// pattern — not duplicated here to avoid silently moving funds on every
+// cycle; fund/deposit once, ahead of time, instead).
+async function fetchViaGateway(url) {
+  const { GatewayClient } = require("@circle-fin/x402-batching/client");
+  const client = new GatewayClient({ chain: "arcTestnet", privateKey: config.CONSUMER_PRIVATE_KEY });
 
-  if (config.DEV_MODE || isLocalOracle) {
-    // Dev stub — a localhost oracle always runs with DEV_MODE=true and accepts
-    // any non-empty X-Payment header, so the stub is always correct here.
-    return JSON.stringify({
-      scheme: "exact",
-      network: isLocalOracle ? "dev" : "arc-testnet",
-      payload: "dev-payment-" + Date.now(),
-      payer: config.CONSUMER_WALLET_ADDRESS,
-    });
+  let data, amount;
+  try {
+    ({ data, amount } = await client.pay(url));
+  } catch (err) {
+    throw new Error(`Gateway payment for oracle fetch failed: ${err.message}`);
   }
 
-  // Production: implement Circle Gateway payment here.
-  // The payment options include the asset, amount, and payTo address.
-  // This is where x402-fetch would normally handle everything automatically.
-  throw new Error(
-    "Production x402 payment not implemented — set DEV_MODE=true for local testing " +
-    "or integrate x402-fetch with Circle Gateway for Arc testnet."
-  );
+  return { response: data, paymentAmount: amount != null ? Number(amount) / 1e6 : 0 };
 }
 
 module.exports = { fetchOraclePrice };

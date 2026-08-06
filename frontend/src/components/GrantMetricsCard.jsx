@@ -37,8 +37,8 @@ export default function GrantMetricsCard({ stats, chainStats }) {
       </div>
 
       <div style={{ display: "flex" }}>
-        <div style={{ flex: 1, padding: "11px 14px", borderRight: "1px solid rgba(255,255,255,.06)" }}>
-          <div style={{ fontSize: "9px", color: "rgba(242,240,255,.25)", textTransform: "uppercase", letterSpacing: ".08em", fontWeight: "600" }}>
+        <div title="Share of verdicts decided by mechanical checks alone (signature/freshness/schema) vs. ones that needed Claude's judgment call." style={{ flex: 1, padding: "11px 14px", borderRight: "1px solid rgba(255,255,255,.06)", cursor: "help" }}>
+          <div className="hint" style={{ fontSize: "9px", color: "rgba(242,240,255,.25)", textTransform: "uppercase", letterSpacing: ".08em", fontWeight: "600", borderBottomColor: "rgba(242,240,255,.12)" }}>
             Tier 1 (no LLM call)
           </div>
           {totalTiered > 0 ? (
@@ -55,8 +55,8 @@ export default function GrantMetricsCard({ stats, chainStats }) {
           )}
         </div>
 
-        <div style={{ flex: 1, padding: "11px 14px", borderRight: "1px solid rgba(255,255,255,.06)" }}>
-          <div style={{ fontSize: "9px", color: "rgba(242,240,255,.25)", textTransform: "uppercase", letterSpacing: ".08em", fontWeight: "600" }}>
+        <div title="Share of large, non-obvious breaches held in a dispute window for owner review instead of slashing instantly." style={{ flex: 1, padding: "11px 14px", borderRight: "1px solid rgba(255,255,255,.06)", cursor: "help" }}>
+          <div className="hint" style={{ fontSize: "9px", color: "rgba(242,240,255,.25)", textTransform: "uppercase", letterSpacing: ".08em", fontWeight: "600", borderBottomColor: "rgba(242,240,255,.12)" }}>
             Challenge Rate
           </div>
           <div className="mono" style={{ fontSize: "15px", fontWeight: "800", color: hasDisputes ? "#fb7103" : "#f2f0ff", marginTop: "3px" }}>
@@ -67,8 +67,8 @@ export default function GrantMetricsCard({ stats, chainStats }) {
           </div>
         </div>
 
-        <div style={{ flex: 1, padding: "11px 14px" }}>
-          <div style={{ fontSize: "9px", color: "rgba(242,240,255,.25)", textTransform: "uppercase", letterSpacing: ".08em", fontWeight: "600" }}>
+        <div title="Cumulative USDC that has actually moved through bonded services — slashed to injured parties plus settled to honest providers." style={{ flex: 1, padding: "11px 14px", cursor: "help" }}>
+          <div className="hint" style={{ fontSize: "9px", color: "rgba(242,240,255,.25)", textTransform: "uppercase", letterSpacing: ".08em", fontWeight: "600", borderBottomColor: "rgba(242,240,255,.12)" }}>
             Throughput
           </div>
           <div className="mono" style={{ fontSize: "15px", fontWeight: "800", color: "#c084fc", marginTop: "3px" }}>

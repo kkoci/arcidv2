@@ -17,7 +17,9 @@
     "demo:dispute-auto-finalize":  "node scripts/demo-dispute-auto-finalize.js",
     "demo:dispute-owner-override": "node scripts/demo-dispute-owner-override.js",
     "breaker:status": "node scripts/breaker.js",
-    "breaker:resume": "node scripts/breaker.js --resume"
+    "breaker:resume": "node scripts/breaker.js --resume",
+    "gateway:status": "node scripts/gateway-fund.js",
+    "gateway:fund":   "node scripts/gateway-fund.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk":         "^0.52.0",

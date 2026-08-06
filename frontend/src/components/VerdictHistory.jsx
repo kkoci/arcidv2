@@ -104,7 +104,12 @@ function Card({ v }) {
         borderBottom: `1px solid ${bdr}`,
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <span style={{ fontSize: "17px", fontWeight: "900", color: accent, letterSpacing: "-0.02em" }}>
+          <span
+            title={isBreach
+              ? "The consumer agent confirmed a breach and the bond contract automatically paid out the provider's collateral — no human approved this."
+              : "The consumer agent verified this response met the SLA — signature valid, fresh, and (for Claude-reviewed calls) semantically genuine."}
+            style={{ fontSize: "17px", fontWeight: "900", color: accent, letterSpacing: "-0.02em", cursor: "help" }}
+          >
             {isBreach ? "⚡ BOND SLASHED" : "✓ SLA MET"}
           </span>
           {v.fault_mode && (
@@ -195,8 +200,12 @@ function Card({ v }) {
             </a>
           )}
           <div style={{ marginLeft: "auto", display: "flex", gap: "10px" }}>
-            {[["ts", c.timestamp_fresh], ["val", c.value_present], ["sig", c.signature_valid]].map(([lbl, pass]) => (
-              <span key={lbl} className="mono" style={{ fontSize: "10px", color: pass ? "#4ade80" : "#fb7103" }}>
+            {[
+              ["ts",  c.timestamp_fresh,   "Timestamp freshness — was this response younger than the 30s SLA when it was checked?"],
+              ["val", c.value_present,     "Value present — did the oracle actually return a price, instead of empty/null data?"],
+              ["sig", c.signature_valid,   "Signature validity — was this response cryptographically signed by the registered oracle wallet?"],
+            ].map(([lbl, pass, hint]) => (
+              <span key={lbl} title={hint} className="mono" style={{ fontSize: "10px", color: pass ? "#4ade80" : "#fb7103", cursor: "help" }}>
                 {pass ? "✓" : "✗"} {lbl}
               </span>
             ))}

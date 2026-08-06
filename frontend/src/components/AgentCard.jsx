@@ -2,7 +2,11 @@ import { useState } from "react";
 
 const ARCSCAN     = "https://testnet.arcscan.app/tx/";
 const ORACLE_ADDR = "0xe2f7a0e6d9865c7dc9b5d19dcc11cbcb4655c661";
-const FAULT_MODES = ["stale", "null", "bad-sig"];
+const FAULT_MODES = [
+  { mode: "stale",   hint: "Oracle returns a real, correctly-signed price — but timestamped over 30s old. Fails the freshness check." },
+  { mode: "null",    hint: "Oracle returns no value at all — an empty response with a paid-for nothing." },
+  { mode: "bad-sig", hint: "Oracle returns a price with a forged signature — fails cryptographic verification outright." },
+];
 
 const fmt     = a => a ? `${a.slice(0,6)}…${a.slice(-4)}` : "—";
 const fmtUsdc = r => r != null ? `$${(Number(r)/1e6).toFixed(2)}` : "—";
@@ -85,15 +89,15 @@ export default function AgentCard({ stats, chainStats, onCycleComplete }) {
         {/* Stats row */}
         <div style={{ display: "flex" }}>
           {[
-            ["Bond",    fmtUsdc(oracle?.amount),                    isSlashed ? slashColor : liveColor],
-            ["Calls",   stats?.totalCalls ?? 0,                     null],
-            ["Slashes", chainStats?.summary?.totalSlashes ?? 0,     (chainStats?.summary?.totalSlashes ?? 0) > 0 ? slashColor : null],
-          ].map(([lbl, val, color], i) => (
-            <div key={lbl} style={{
-              flex: 1, padding: "11px 14px",
+            ["Bond",    fmtUsdc(oracle?.amount),                    isSlashed ? slashColor : liveColor, "USDC/USYC collateral this oracle currently has locked on-chain — what a confirmed breach would draw from."],
+            ["Calls",   stats?.totalCalls ?? 0,                     null,                                "Total paid /api/price requests served so far."],
+            ["Slashes", chainStats?.summary?.totalSlashes ?? 0,     (chainStats?.summary?.totalSlashes ?? 0) > 0 ? slashColor : null, "Times this oracle's bond has been automatically seized after a confirmed breach."],
+          ].map(([lbl, val, color, hint], i) => (
+            <div key={lbl} title={hint} style={{
+              flex: 1, padding: "11px 14px", cursor: "help",
               borderRight: i < 2 ? "1px solid rgba(255,255,255,.06)" : "none",
             }}>
-              <div style={{ fontSize: "9px", color: "rgba(242,240,255,.25)", textTransform: "uppercase", letterSpacing: ".08em", fontWeight: "600" }}>{lbl}</div>
+              <div className="hint" style={{ fontSize: "9px", color: "rgba(242,240,255,.25)", textTransform: "uppercase", letterSpacing: ".08em", fontWeight: "600", borderBottomColor: "rgba(242,240,255,.12)" }}>{lbl}</div>
               <div className="mono" style={{ fontSize: "15px", fontWeight: "800", color: color || "#f2f0ff", marginTop: "3px" }}>{val}</div>
             </div>
           ))}
@@ -101,21 +105,22 @@ export default function AgentCard({ stats, chainStats, onCycleComplete }) {
 
         {/* Fault injection */}
         <div style={{ padding: "11px 15px", borderTop: "1px solid rgba(255,255,255,.06)" }}>
-          <div style={{ fontSize: "9px", color: "rgba(242,240,255,.2)", textTransform: "uppercase", letterSpacing: ".1em", fontWeight: "600", marginBottom: "7px" }}>
+          <div className="hint" style={{ fontSize: "9px", color: "rgba(242,240,255,.2)", textTransform: "uppercase", letterSpacing: ".1em", fontWeight: "600", marginBottom: "7px", display: "inline-block", borderBottomColor: "rgba(242,240,255,.1)" }}
+            title="Make the oracle misbehave on its next response, so you can watch the consumer agent catch it and slash the bond in real time.">
             Inject fault → Claude detects → slashes
           </div>
           <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
-            {FAULT_MODES.map(m => (
-              <button key={m} onClick={() => injectFault(m)} disabled={busy} style={{
+            {FAULT_MODES.map(({ mode, hint }) => (
+              <button key={mode} title={hint} onClick={() => injectFault(mode)} disabled={busy} style={{
                 padding: "4px 11px", fontSize: "10px",
                 fontFamily: "'JetBrains Mono', monospace", fontWeight: "600",
                 borderRadius: "6px",
-                background: activeFault === m ? "rgba(251,113,3,.18)"            : "rgba(255,255,255,.06)",
-                color:      activeFault === m ? slashColor                       : "rgba(242,240,255,.4)",
-                border:     `1px solid ${activeFault === m ? "rgba(251,113,3,.4)" : "rgba(255,255,255,.1)"}`,
+                background: activeFault === mode ? "rgba(251,113,3,.18)"            : "rgba(255,255,255,.06)",
+                color:      activeFault === mode ? slashColor                       : "rgba(242,240,255,.4)",
+                border:     `1px solid ${activeFault === mode ? "rgba(251,113,3,.4)" : "rgba(255,255,255,.1)"}`,
                 transition: "all .15s",
               }}>
-                {m}
+                {mode}
               </button>
             ))}
             <button onClick={resetFault} disabled={busy || !activeFault} style={{
@@ -133,6 +138,7 @@ export default function AgentCard({ stats, chainStats, onCycleComplete }) {
         <div style={{ padding: "13px 15px", borderTop: "1px solid rgba(255,255,255,.06)" }}>
           <button
             onClick={trigger} disabled={triggering}
+            title="Runs one full fault → verify → slash cycle end to end against the live contract, so you don't have to wait for the timer loop."
             style={{
               width: "100%", padding: "14px 18px",
               fontSize: "13px", fontWeight: "900", letterSpacing: "-.01em",
@@ -210,19 +216,20 @@ export default function AgentCard({ stats, chainStats, onCycleComplete }) {
 }
 
 function Pill({ status, small }) {
-  const { color, label } = {
-    active:   { color: "#22d9e8", label: "● active"  },
-    slashed:  { color: "#fb7103", label: "⚡ slashed" },
-    "no bond":{ color: "rgba(242,240,255,.3)", label: "○ no bond" },
-  }[status] ?? { color: "rgba(242,240,255,.3)", label: "○ —" };
+  const { color, label, hint } = {
+    active:   { color: "#22d9e8", label: "● active",  hint: "Bond is posted and unslashed — this agent is currently allowed to sell service." },
+    slashed:  { color: "#fb7103", label: "⚡ slashed", hint: "This agent's bond has been paid out after a confirmed breach — it can re-bond to sell again." },
+    "no bond":{ color: "rgba(242,240,255,.3)", label: "○ no bond", hint: "This wallet isn't TEE-registered or hasn't posted collateral yet — it can't sell service." },
+  }[status] ?? { color: "rgba(242,240,255,.3)", label: "○ —", hint: undefined };
 
   return (
-    <div style={{
+    <div title={hint} style={{
       padding: small ? "2px 8px" : "3px 10px",
       borderRadius: "99px", fontSize: "10px", fontWeight: "700",
       background: color + "18", color,
       border: `1px solid ${color}45`,
       whiteSpace: "nowrap", transition: "all .5s",
+      cursor: hint ? "help" : "default",
     }}>
       {label}
     </div>
