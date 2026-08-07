@@ -60,6 +60,116 @@ The complete loop ran end-to-end on Arc testnet on 2026-06-27:
 
 ---
 
+## Proof-of-Exploit — A Second Vertical on the Same Primitive
+
+Post-submission (see [CHANGELOG.md](CHANGELOG.md)). arcid2's core mechanism —
+an agent posts collateral, a TEE-attested verifier judges an outcome, a
+confirmed breach pays out automatically on-chain — was built around one
+problem: did an oracle meet its SLA, judged by Claude. This adds a second,
+deliberately different problem on the *same* mechanism:
+
+> **A TEE-attested, automated bug bounty.** A target owner registers a
+> contract + invariant + bounty pool. A registered, TEE-attested verifier
+> wallet runs a known exploit class against the target, checks a
+> deterministic invariant, and signs a verdict. A confirmed exploit pays
+> the researcher automatically.
+
+**Why this is a different claim, not a restatement:** the price-oracle
+vertical's payout decision is an LLM judgment call — Claude reasoning about
+whether a response constitutes a breach. This vertical's payout decision is
+**not**. "Did the invariant break" is checked by actually running the code,
+yes/no, deterministically. No LLM anywhere in the payout-critical path.
+TEE-attested identity is the whole differentiator here, not a supporting
+detail sitting alongside an LLM the way it does in the price-oracle
+vertical.
+
+**Checked against a named competitor before committing to this, not assumed:**
+AgentIndemnity — a real, existing USDC-backed performance-bond product on
+Arc, priced via Circle Gateway Nanopayments — already occupies the "agent
+posts bond, harmful output slashes it" category the price-oracle vertical
+is in. A web search confirmed that directly rather than taking it on faith.
+The same search found no live Arc/Circle product combining TEE attestation
+with automated, on-chain bug-bounty payout — the closest hits were academic
+proposals and conventional (human-triage, non-TEE) bounty platforms like
+Immunefi/Hacken/Sherlock. Stated honestly: "no evidence found," not
+"provably doesn't exist" — search coverage of a very recent hackathon
+submission is never guaranteed.
+
+### Mechanism
+
+```
+Target owner registers: contract + invariant + bounty pool (USDC)
+                              │
+Researcher submits a known exploit class (reentrancy, this build)
+                              │
+Harness runs it against a FRESH LOCAL DEPLOYMENT of the target's
+bytecode (see "What's cut" below — not a fork of live on-chain state)
+                              │
+Deterministic invariant check: did the attacker drain more than
+their own legitimate deposit? yes/no — no LLM involved
+                              │
+Verifier wallet (TEE-registered via the same ArcIDRegistryV2 moat
+the price-oracle vertical uses) signs the verdict
+                              │
+ExploitBounty.submitVerdict() on-chain — confirmed exploit pays the
+researcher automatically; rejected submission moves nothing
+```
+
+### What's real vs. what's explicitly cut for time
+
+| | |
+|---|---|
+| **Real** | `ExploitBounty.sol` deployed and live on Arc testnet. A real reentrancy exploit runs against a fresh local deployment of a real vulnerable contract. A confirmed exploit produces a real `submitVerdict()` transaction that really pays the researcher, live-verified below. A genuinely non-vulnerable negative control (`VulnerableVaultFixed`) correctly produces zero payout — the invariant check isn't hardcoded to always confirm. The verifier wallet is really TEE-registered through the same `ArcIDRegistryV2` the price-oracle vertical uses. |
+| **Cut — forking live state** | The harness runs the exploit against a **fresh local deployment** of the target's exact bytecode, not a fork of an already-deployed contract's live on-chain state. This was a deliberate decision made *before* building the harness (see the Phase 1 spike, `spike/proof-of-exploit/`), not a fallback discovered mid-build. |
+| **Cut — arbitrary submissions** | The harness runs one pre-registered, known exploit class (reentrancy) against one pre-written vulnerable contract. It does not compile or execute arbitrary researcher-supplied code. |
+| **Cut — real Gateway settlement on the anti-spam gate** | `bounty/server.js`'s x402 submission gate is DEV_MODE only — same dev-stub-accepts-any-header behavior the price-oracle vertical's dev mode has, not the real Circle Gateway path that vertical also has in production. |
+| **Cut — persistent deployment** | The harness runs locally for the demo, same posture the consumer agent already has ("never meant to run as a persistent deployed service" — see CLAUDE.md). Not deployed to Phala. |
+
+### Trust boundary (same doctrine as the price-oracle vertical)
+
+Nothing new enters the TDX enclave for this vertical. The verifier
+wallet's TEE-residency is proven once, separately, through the same
+`GET /api/attest` flow the price-oracle wallet already uses — trust in a
+verdict is transitive from that registration, not from the harness process
+re-entering an enclave per submission. The exploit execution, invariant
+check, and verdict signing all live in the same "transitive trust" tier
+price-signing and LLM adjudication already occupy — see "Trust Boundary"
+below.
+
+### Live Proof — Real Payout on Arc Testnet
+
+Both directions, real transactions, 2026-08-07:
+
+| | |
+|---|---|
+| `ExploitBounty` | [`0x52fB6011a6FaCD0f86CC28b32cDF85Df47449A61`](https://testnet.arcscan.app/address/0x52fB6011a6FaCD0f86CC28b32cDF85Df47449A61) |
+| Verifier wallet (dedicated, TEE-registered) | `0x95C80031Ec9831cD5A830AF61616CC68e6B9d671` — agentId `0xa86231d2647014006cafd9b5c5b21be8947ab06bc89e2b7ee0e1651170ff6497` |
+| **Confirmed exploit → real payout** | Target 1, `VulnerableVault` at `0x53Cc93a28C839EEA98FF87abF4c7994EAe81dA6a`. `submitVerdict()`: [`0xeee331d0...`](https://testnet.arcscan.app/tx/0xeee331d0b03120421511939e23444d497bf748a9cc6920ba8de57570f0546a9f) — 2 USDC paid to the researcher for real; `claimed=true` confirmed on-chain afterward. |
+| **Negative control → zero payout** | Target 2, `VulnerableVault` at `0xfeBe8b00fb6d8e7eB63E9b62340e42f407A4b4A8`. `submitVerdict()`: [`0x52d32eef...`](https://testnet.arcscan.app/tx/0x52d32eef70d0a7c3391eaefe12648df13c7312714deac04e72fac0412e48a6f8) — `exploitConfirmed=false`, zero funds moved; `claimed=false`, `bountyAmount=2.00 USDC` confirmed unchanged on-chain afterward. Also exercised live through `bounty/server.js`'s HTTP `/submit` endpoint (real CORS + x402 dev-gate, request shaped exactly like the frontend card's own fetch call). |
+
+### Try it
+
+```bash
+# 1 — deploy ExploitBounty (points at the EXISTING ArcIDRegistryV2, never a new one)
+#     also provisions + registers a dedicated verifier wallet
+npm run deploy:exploit-bounty:arc
+
+# 2 — register a bounty target (deploys a real VulnerableVault as the reference target)
+TARGET_OWNER_PRIVATE_KEY=... in .env, then:
+npm run bounty:register-target -- --bounty 2.0
+
+# 3a — CLI: run the harness (exploit -> invariant check -> sign -> real submitVerdict())
+BOUNTY_VERIFIER_PRIVATE_KEY=... in .env (written automatically by step 1), then:
+npm run bounty:submit -- --target-id <id> --researcher 0xYourAddress
+npm run bounty:submit -- --target-id <id> --researcher 0xYourAddress --mode control  # negative control
+
+# 3b — or the HTTP server + dashboard card
+npm run bounty:server                 # http://localhost:3002, x402-gated /submit
+cd frontend && npm run dev            # ProofOfExploitCard talks to it directly
+```
+
+---
+
 ## The Moat
 
 Three properties stacked. No competitor, including AOZ, has all three:
@@ -620,8 +730,9 @@ slash flow already meets.
 | Post-submission | Phase 6.1: optimistic challenge window in `ArcIDBond.sol` — large semantic slashes held pending dispute (owner-only interim resolver, stated as a placeholder — see Future Work) instead of executing instantly; auto-finalizes if unresolved; 27 new tests | ✅ Complete → [CHANGELOG.md](CHANGELOG.md) |
 | Post-submission | Phase 6.2: `slashGate.js` routes large semantic slashes to `fileIndictment()` instead of `slash()`, decided by a live on-chain read mirroring the contract's own rule; live-verified against a local redeploy of Phase 6.1's bytecode (the shared Arc testnet contract still predates 6.1 — redeploy is 6.4's job) | ✅ Complete → [CHANGELOG.md](CHANGELOG.md) |
 | Post-submission | Phase 6.3: `dispute:list` / `dispute:resolve` CLI — interim owner review tooling that surfaces the off-chain Claude rationale before an interactive approve/reject confirmation | ✅ Complete → [CHANGELOG.md](CHANGELOG.md) |
+| Post-submission | **Proof-of-Exploit — a second vertical**: `ExploitBounty.sol`, TEE-attested automated bug bounty (deterministic invariant check, no LLM in the payout path); 51 new tests | ✅ Complete → see below + [CHANGELOG.md](CHANGELOG.md) |
 
-**Test suite:** 131 passing (`npm test`) — no external RPC, no `.env` required.
+**Test suite:** 209 passing (`npm test`) — no external RPC, no `.env` required.
 
 ---
 
@@ -891,6 +1002,10 @@ admin        → setAuthorizedSlasher (owner only, emits SlasherUpdated)
 | USDC (Arc testnet) | `0x3600000000000000000000000000000000000000` |
 | USYC token | `0xe9185F0c5F296Ed1797AaE4238D26CCaBEadb86C` |
 | USYC Teller (mint/redeem) | `0x9fdF14c5B14173D74C08Af27AebFf39240dC105A` |
+| ExploitBounty (Proof-of-Exploit vertical) | `0x52fB6011a6FaCD0f86CC28b32cDF85Df47449A61` |
+| ExploitBounty verifier wallet (TEE-registered) | `0x95C80031Ec9831cD5A830AF61616CC68e6B9d671` |
+| VulnerableVault, target 1 (confirmed exploit, claimed) | `0x53Cc93a28C839EEA98FF87abF4c7994EAe81dA6a` |
+| VulnerableVault, target 2 (negative control, unclaimed) | `0xfeBe8b00fb6d8e7eB63E9b62340e42f407A4b4A8` |
 
 **Registered & bonded agents on the current ArcIDBond (`0x5E5eA9...`), as of
 2026-07-30 — ⚠ not the same live state as the pre-tiering table this

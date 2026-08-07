@@ -2112,3 +2112,96 @@ Spend Policy" section + a Circle Stack table row), `SUBMISSION.md` (new
 bullet). No contract, script, or application code changed this phase —
 purely documentation, per the doc's own conditional commit-message
 instruction.
+
+---
+
+## Post-submission: Proof-of-Exploit — a second vertical on the same primitive (2026-08-07)
+
+**Context.** Same post-form-lock, extended-event-window basis as every
+entry above. This is a genuinely new vertical, not an extension of the
+price-oracle one — built in two stages: a throwaway spike
+(`spike/proof-of-exploit/`, kept in the repo as a record of what was
+proven first and cheaply) to de-risk the highest-uncertainty piece before
+committing to the full build, then the real build described below.
+
+**The pitch.** arcid2's core mechanism — an agent posts collateral, a
+TEE-attested verifier judges an outcome, a confirmed breach pays out
+automatically on-chain — was built around one problem (did an oracle meet
+its SLA, judged by Claude). This adds a second, deliberately different
+problem on the *same* mechanism: **a TEE-attested, automated bug bounty.**
+A target owner registers a contract + invariant + bounty pool. A
+registered, TEE-attested verifier wallet runs a known exploit class
+against the target, checks a deterministic invariant, and signs a verdict.
+A confirmed exploit pays the researcher automatically.
+
+**Why this is a different claim than the price-oracle vertical, not a
+restatement of it:** the price-oracle vertical's payout decision is an LLM
+judgment call (Claude reasoning about whether a response was a genuine
+breach). This vertical's payout decision is **not** — "did the invariant
+break" is checked by actually running the code, yes/no, deterministically.
+No LLM anywhere in the payout-critical path. TEE-attested identity is the
+whole differentiator here, not a supporting detail alongside an LLM.
+
+**Checked against a named competitor, not assumed:** AgentIndemnity (a
+real, existing USDC-backed performance-bond product on Arc, priced via
+Circle Gateway Nanopayments) already occupies the "agent posts bond,
+harmful output slashes it" category the price-oracle vertical is in — a
+web search before scoping this confirmed that directly, rather than taking
+it on faith. The same search found no live Arc/Circle product combining
+TEE attestation with automated, on-chain bug-bounty payout — closest hits
+were academic proposals and conventional (human-triage, non-TEE) bounty
+platforms. Stated as "no evidence found," not "provably doesn't exist" —
+search coverage of a very recent hackathon submission is never guaranteed.
+
+**What was added:**
+
+| Area | What |
+|---|---|
+| `contracts/vulnerable/VulnerableVault.sol` | Deliberately vulnerable demo target — classic checks-effects-interactions reentrancy bug (sends ETH before zeroing the caller's tracked balance). |
+| `contracts/vulnerable/VulnerableVaultFixed.sol` | The negative control — identical contract, CEI-corrected. Kept as a real, checked-in demo path (not just a spike artifact) so the harness can prove it clears a patched target, not only flag a broken one. |
+| `contracts/vulnerable/ReentrancyAttacker.sol` | The exploit payload. Stops reentering once the vault can no longer cover one more withdrawal, instead of a fixed hop count — a naive fixed-count version was tried first and found (in the spike) to revert the *entire* attack transaction once it attempts one withdrawal too many, erasing every earlier successful drain in the same call stack. Documented in the contract's own comment as a real gotcha, not a hypothetical one. |
+| `contracts/ExploitBounty.sol` | New, small, deliberately NOT an `ArcIDBond` extension — `ArcIDBond`'s `slash()` punishes the bond-holder for their own misbehavior; a bounty pays a third-party researcher out of a pool the target owner funded voluntarily. `registerTarget()` (open to anyone — no TEE-gating on the bounty poster, only on the verifier), `submitVerdict()` (restricted to a single owner-set `authorizedVerifier`, additionally checked against `IArcIDRegistry.agentIdBySigner()` — the same interface `ArcIDBond` already uses, so the verifier's identity is the same class of proof, not a new trust claim), `withdrawBounty()`. Fixed full-bounty-per-finding payout only, no proportional/tiered schedule — a bug bounty conventionally pays a flat amount per validated finding. |
+| `test/VulnerableVault.test.js`, `test/ExploitBounty.test.js` | 17 + 34 = 51 new tests (209 total, up from 158) — both exploit directions (drains the vulnerable vault, clears the patched one, including a regression test for the revert-unwind gotcha above), full `ExploitBounty` access control (both independent verifier gates, invariant-ID mismatch, double-claim prevention, owner withdrawal, verifier rotation). |
+| `bounty/harness.js` | Runs the exploit against a **fresh local deployment** of `VulnerableVault` (ported from the spike, already proven there), signs the verdict with the registered `BOUNTY_VERIFIER_PRIVATE_KEY` wallet, submits `submitVerdict()` for real on Arc testnet. Two independent network contexts in one process, deliberately not conflated: `hre.ethers` bound to the local `--network hardhat` (the exploit itself) and a separate, independent `JsonRpcProvider` pointed at Arc testnet (the on-chain submission) — see the file's own doc comment. |
+| `bounty/server.js` | HTTP submission entrypoint, `POST /submit`, gated by an x402 anti-spam fee — copy-adapted from the exact `devX402Middleware` pattern already in `oracle/src/index.js` (same 402 shape, same dev-stub-accepts-any-header behavior). DEV_MODE only — no real Circle Gateway settlement wired for this vertical, stated plainly rather than left to read as done by omission. |
+| `scripts/deploy_exploit_bounty.js` | Deploys `ExploitBounty` pointed at the **existing** `ArcIDRegistryV2` (read from `deployments/<network>_standalone.json`, same discipline as `deploy_bond_v2.js` — never touches the identity layer). Also provisions a **dedicated** verifier wallet (separate from the oracle/consumer wallets, avoiding nonce contention with the live price-oracle vertical's running processes) — funds it, registers it via the same DCAP-prototype-quote flow `deploy_standalone.js` already uses, wires it as `authorizedVerifier`. The generated private key is written directly to `.env` and never printed to stdout. |
+| `scripts/cli/bounty-register-target.js`, `scripts/cli/bounty-submit.js` | Standard `scripts/cli/*.js` conventions (`requireEnvKey()`, flag-based args for non-secret parameters). `bounty-submit.js` is a thin wrapper that shells out to `hardhat run bounty/harness.js` — stated plainly in its own comment, not hidden — because the exploit needs a real local EVM, which only Hardhat's runtime provides; every other `scripts/cli/*.js` tool talks to already-deployed contracts via a plain provider and has no such need. This is the fallback demo path if the frontend runs short on time. |
+| `frontend/src/components/ProofOfExploitCard.jsx` | One new component — target ID + researcher address inputs, "Run exploit" / "Negative control" buttons, verdict + real payout tx link. One additive import + render line in `App.jsx`, no other existing component touched. Talks directly to `bounty/server.js` (its own CORS headers, not proxied through `frontend/vite.config.js`, which was left untouched). |
+
+**Explicitly cut for time, stated rather than silently absorbed:**
+forking Arc testnet's live RPC state (`hardhat_reset`-style forking
+pointed at the real deployed target contract) was the original scoping
+doc's stretch goal — a decision was made *before* building the harness to
+commit to fresh-local-deployment instead and not attempt it at all, not a
+fallback discovered mid-build. The harness deploys its own fresh copy of
+the exact same `VulnerableVault` bytecode with seeded state, rather than
+forking a literal already-deployed instance's live state. The
+`registerTarget()` reference `targetContract` address IS a real, separately
+deployed instance on Arc testnet (for a real, inspectable address on the
+explorer) — but the harness's own invariant check runs against its own
+fresh local copy, not that live one. Also cut: real Circle Gateway
+settlement for the x402 anti-spam gate (dev-stub only, see
+`bounty/server.js` above), and open/arbitrary exploit-code submission
+(the harness runs one pre-registered, known exploit class — reentrancy —
+against one pre-written vulnerable contract, not arbitrary
+researcher-supplied code).
+
+**Live-verified on Arc testnet, both directions, real transactions:**
+
+| | |
+|---|---|
+| `ExploitBounty` | `0x52fB6011a6FaCD0f86CC28b32cDF85Df47449A61` |
+| Verifier wallet (dedicated, TEE-registered) | `0x95C80031Ec9831cD5A830AF61616CC68e6B9d671` — agentId `0xa86231d2647014006cafd9b5c5b21be8947ab06bc89e2b7ee0e1651170ff6497` |
+| Target 1 — confirmed exploit | `VulnerableVault` at `0x53Cc93a28C839EEA98FF87abF4c7994EAe81dA6a`; `submitVerdict()` tx [`0xeee331d0...`](https://testnet.arcscan.app/tx/0xeee331d0b03120421511939e23444d497bf748a9cc6920ba8de57570f0546a9f) — 2 USDC paid to the researcher for real, `claimed=true` confirmed on-chain afterward. |
+| Target 2 — negative control | `VulnerableVault` at `0xfeBe8b00fb6d8e7eB63E9b62340e42f407A4b4A8`; `submitVerdict()` tx [`0x52d32eef...`](https://testnet.arcscan.app/tx/0x52d32eef70d0a7c3391eaefe12648df13c7312714deac04e72fac0412e48a6f8) — `exploitConfirmed=false`, zero funds moved, `claimed=false`/`bountyAmount=2.00 USDC` confirmed unchanged on-chain afterward. Also exercised via the live HTTP `/submit` endpoint (CORS + x402 dev-gate both verified against a real request shaped exactly like the frontend's own fetch call). |
+
+**What NOT touched, confirmed:** `ArcIDBond.sol`, `DCAPVerifier.sol`,
+`ArcIDRegistryV2.sol`, `ConsumerSessionKeyGuard.sol`, every existing
+interface, every existing test file, `oracle/src/index.js`'s existing
+routes, `oracle/src/chain.js`, `signer.js`, `attest.js`, every file under
+`consumer/`, and every existing frontend component beyond the one
+additive `App.jsx` line. `npm test` was run after every phase of this
+build (not just at the end) and stayed green throughout — 209 passing at
+completion, up from 158 at the start of this entry, zero regressions in
+the pre-existing 158. The price-oracle vertical's live demo path,
+deployed contracts, and Phala CVM were not touched or redeployed.
