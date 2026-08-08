@@ -1,12 +1,23 @@
 import { useEffect, useState, useRef } from "react";
-import AgentCard     from "./components/AgentCard.jsx";
-import VerdictHistory from "./components/VerdictHistory.jsx";
-import USYCBondCard  from "./components/USYCBondCard.jsx";
+import SealMark          from "./components/SealMark.jsx";
+import AgentCard          from "./components/AgentCard.jsx";
+import VerdictHistory     from "./components/VerdictHistory.jsx";
 import GatewayPaymentCard from "./components/GatewayPaymentCard.jsx";
-import GrantMetricsCard from "./components/GrantMetricsCard.jsx";
+import GrantMetricsCard   from "./components/GrantMetricsCard.jsx";
+import USYCBondCard       from "./components/USYCBondCard.jsx";
 import ProofOfExploitCard from "./components/ProofOfExploitCard.jsx";
 
 const POLL_MS = 5000;
+
+// Unified mechanism flow — one narrative at the top instead of a duplicate
+// 4-step explainer per product below (the "unify the story, not the code"
+// call from the unification brainstorm).
+const STEPS = [
+  { n: "01", title: "Post collateral",       body: "Real USDC/USYC locked before any claim can be made." },
+  { n: "02", title: "TEE proves identity",   body: "Intel TDX attests the exact code that will judge the outcome." },
+  { n: "03", title: "Outcome is verified",   body: "Deterministic where possible; Claude only where a judgment call is unavoidable." },
+  { n: "04", title: "Settled automatically", body: "Slash, pay, or release — on-chain, no human review." },
+];
 
 export default function App() {
   const [stats,      setStats]      = useState(null);
@@ -15,7 +26,9 @@ export default function App() {
   const [loading,    setLoading]    = useState(true);
   const [live,       setLive]       = useState(false);
   const [lastPoll,   setLastPoll]   = useState(null);
-  const timerRef = useRef(null);
+  const timerRef   = useRef(null);
+  const oracleRef  = useRef(null);
+  const exploitRef = useRef(null);
 
   async function poll() {
     try {
@@ -27,7 +40,7 @@ export default function App() {
       if (cRes.ok) setChainStats(await cRes.json());
       setLive(true);
     } catch { setLive(false); }
-    finally  { setLoading(false); setLastPoll(new Date()); }
+    finally { setLoading(false); setLastPoll(new Date()); }
   }
 
   useEffect(() => {
@@ -37,189 +50,172 @@ export default function App() {
   }, []);
 
   const sorted     = [...verdicts].reverse();
-  const slashCount = chainStats?.summary?.totalSlashes  ?? 0;
+  const slashCount = chainStats?.summary?.totalSlashes ?? 0;
   const tvlRaw     = chainStats?.summary?.tvlUsdc;
   const tvlDisplay = tvlRaw != null ? `$${(Number(tvlRaw)/1e6).toFixed(2)}` : "—";
-  const agentCount = chainStats?.summary?.activeAgents  ?? "—";
+  const agentCount = chainStats?.summary?.activeAgents ?? "—";
+
+  const scrollTo = (ref) => ref.current?.scrollIntoView({ behavior: "smooth", block: "start" });
 
   return (
-    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+    <div style={{ minHeight: "100vh" }}>
 
-      {/* ── Header ── */}
+      {/* ── Header — brand + jump-nav, not a product picker ── */}
       <header style={{
         position: "sticky", top: 0, zIndex: 100,
-        background: "rgba(13,11,36,.75)", backdropFilter: "blur(24px)",
-        borderBottom: "1px solid rgba(255,255,255,.07)",
-        padding: "0 28px",
-        display: "flex", alignItems: "center", height: "56px", gap: "24px",
+        background: "rgba(10,12,16,.9)", backdropFilter: "blur(14px)",
+        borderBottom: "1px solid var(--hairline)",
+        padding: "0 28px", display: "flex", alignItems: "center", height: "58px", gap: "20px",
       }}>
-        {/* Brand */}
-        <div style={{ display: "flex", alignItems: "center", gap: "10px", flexShrink: 0 }}>
-          <div style={{
-            width: "30px", height: "30px", borderRadius: "8px",
-            background: "linear-gradient(135deg, #7c3aed, #c084fc)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            boxShadow: "0 0 18px rgba(192,132,252,.55)",
-          }}>
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <path d="M7 1.5L12.5 12H1.5L7 1.5Z" stroke="white" strokeWidth="1.6" strokeLinejoin="round"/>
-              <circle cx="7" cy="8.5" r="1.2" fill="white"/>
-            </svg>
-          </div>
-          <span style={{ fontSize: "16px", fontWeight: "900", letterSpacing: "-0.03em" }}>ArcID</span>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <SealMark state="sealed" size={24} />
+          <span className="display" style={{ fontSize: "17px", fontWeight: "700" }}>ArcID</span>
           <span style={{
-            fontSize: "9px", padding: "2px 8px", borderRadius: "99px",
-            background: "rgba(192,132,252,.15)", color: "#c084fc",
-            border: "1px solid rgba(192,132,252,.3)", fontWeight: "700", letterSpacing: ".1em",
+            fontSize: "9px", padding: "2px 8px", borderRadius: "3px",
+            background: "rgba(192,138,62,.12)", color: "var(--seal)",
+            border: "1px solid rgba(192,138,62,.3)", fontWeight: "600", letterSpacing: ".1em",
           }}>TESTNET</span>
         </div>
-
-        {/* Inline stats — no hero needed, these ARE the stats */}
-        <div style={{ display: "flex", gap: "2px", flex: 1, justifyContent: "center" }}>
-          <HeaderStat loading={loading} value={agentCount}   label="bonded"          color="#c084fc"
-            title="Agents currently holding an active USDC/USYC bond — the collateral that makes their reputation real money, not a score." />
-          <HeaderStat loading={loading} value={tvlDisplay}   label="at risk"         color="#22d9e8" divider
-            title="Total collateral currently posted across all bonded agents — this is what a confirmed breach draws from." />
-          <HeaderStat loading={loading} value={slashCount}   label="slashed"
-            color={slashCount > 0 ? "#fb7103" : "rgba(242,240,255,.25)"}
-            highlight={slashCount > 0}
-            divider
-            title="Confirmed SLA breaches where the bond contract has automatically paid the injured party out of the provider's collateral." />
-        </div>
-
-        {/* Live dot */}
-        <div style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0 }}>
+        <div style={{ flex: 1 }} />
+        <button onClick={() => scrollTo(oracleRef)} style={{
+          background: "none", border: "1px solid var(--hairline-hi)", color: "var(--paper-muted)",
+          padding: "6px 14px", fontSize: "11px", borderRadius: "6px",
+        }}>01 · Data SLA</button>
+        <button onClick={() => scrollTo(exploitRef)} style={{
+          background: "none", border: "1px solid var(--hairline-hi)", color: "var(--paper-muted)",
+          padding: "6px 14px", fontSize: "11px", borderRadius: "6px",
+        }}>02 · Exploit Bounty</button>
+        <div style={{ display: "flex", alignItems: "center", gap: "6px", marginLeft: "8px" }}>
           <div style={{
-            width: "7px", height: "7px", borderRadius: "50%",
-            background: live ? "#4ade80" : "#fb7103",
-            boxShadow: live ? "0 0 0 3px rgba(74,222,128,.2), 0 0 10px rgba(74,222,128,.4)" : "none",
+            width: "6px", height: "6px", borderRadius: "50%",
+            background: live ? "var(--settle)" : "var(--breach)",
             animation: live ? "pulse 2.5s infinite" : "none",
           }} />
-          <span style={{ fontSize: "10px", color: "rgba(242,240,255,.3)" }}>
+          <span className="mono" style={{ fontSize: "10px", color: "var(--paper-faint)" }}>
             {live ? lastPoll?.toLocaleTimeString() : "offline"}
           </span>
         </div>
       </header>
 
-      {/* ── Headline strip — compact, no full hero ── */}
-      <div style={{
-        padding: "28px 28px 20px",
-        borderBottom: "1px solid rgba(255,255,255,.05)",
-      }}>
-        <h1 style={{
-          fontSize: "clamp(24px, 3.4vw, 38px)",
-          fontWeight: "900",
-          letterSpacing: "-0.03em",
-          lineHeight: "1.15",
-          color: "#f2f0ff",
-          marginBottom: "8px",
-        }}>
-          The trust layer for agent-to-agent commerce.
-        </h1>
-        <p style={{ fontSize: "14px", fontWeight: "700", color: "#fb7103", textShadow: "0 0 24px rgba(251,113,3,.35)" }}>
-          Cheat the SLA, lose the bond — automatically, on-chain, no appeals.
-        </p>
-      </div>
-
-      <HowItWorks />
-
-      {/* ── Main grid ── */}
-      <div style={{
-        flex: 1,
-        display: "grid",
-        gridTemplateColumns: "1fr 370px",
-        gap: "18px",
-        padding: "18px 28px 32px",
-        maxWidth: "1400px",
-        width: "100%",
-        margin: "0 auto",
-        alignItems: "start",
-      }}>
-        <VerdictHistory verdicts={sorted} />
-
-        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-          <AgentCard stats={stats} chainStats={chainStats} onCycleComplete={poll} />
-          <ProofOfExploitCard />
-          <GrantMetricsCard stats={stats} chainStats={chainStats} />
-          <GatewayPaymentCard />
-          <USYCBondCard usyc={stats?.usyc} />
-          <TechDetails stats={stats} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function HeaderStat({ loading, value, label, color, divider, highlight, title }) {
-  return (
-    <div title={title} style={{
-      display: "flex", alignItems: "baseline", gap: "5px",
-      padding: "0 18px",
-      borderLeft: divider ? "1px solid rgba(255,255,255,.07)" : "none",
-      cursor: title ? "help" : "default",
-    }}>
-      <span style={{
-        fontSize: "18px", fontWeight: "900", fontFamily: "'JetBrains Mono', monospace",
-        color: loading ? "rgba(255,255,255,.1)" : color,
-        textShadow: (highlight && !loading) ? `0 0 20px ${color}` : "none",
-        transition: "color .4s, text-shadow .4s",
-      }}>
-        {loading ? "—" : value}
-      </span>
-      <span className="hint" style={{ fontSize: "10px", color: "rgba(242,240,255,.3)", fontWeight: "500", borderBottomColor: "rgba(242,240,255,.15)" }}>
-        {label}
-      </span>
-    </div>
-  );
-}
-
-// ── How it works — a cold visitor gets oriented before hitting live jargon
-// (bond / TVL / slash / SLA) further down the page. Four numbered steps,
-// matching the pattern trust/verification platforms (EigenLayer's slashing
-// docs, Chainlink's Proof of Reserve) use: a short mechanical walkthrough
-// ahead of any live data, not a marketing hero.
-const HOW_IT_WORKS_STEPS = [
-  {
-    n: "01", color: "#c084fc", title: "Provider posts a bond",
-    body: "The oracle locks real USDC/USYC collateral on-chain before it's allowed to sell a single call. This is capital at risk, not a reputation score.",
-  },
-  {
-    n: "02", color: "#22d9e8", title: "Sells per-call via x402",
-    body: "A buyer pays a fraction of a cent per request (x402 nanopayment) and gets back a signed response.",
-  },
-  {
-    n: "03", color: "#22d9e8", title: "A second AI agent verifies",
-    body: "The consumer agent checks the signature and freshness deterministically, then asks Claude whether the content itself looks genuine.",
-  },
-  {
-    n: "04", color: "#fb7103", title: "Breach → bond slashes",
-    body: "On a confirmed breach, the smart contract pays the injured party out of the provider's bond automatically — on-chain, no human review.",
-  },
-];
-
-function HowItWorks() {
-  return (
-    <div style={{
-      padding: "20px 28px",
-      borderBottom: "1px solid rgba(255,255,255,.05)",
-      maxWidth: "1400px", width: "100%", margin: "0 auto",
-    }}>
-      <div style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-        gap: "12px",
-      }}>
-        {HOW_IT_WORKS_STEPS.map((s) => (
-          <div key={s.n} className="g" style={{ padding: "14px 16px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "7px" }}>
-              <span className="mono" style={{ fontSize: "11px", fontWeight: "900", color: s.color }}>{s.n}</span>
-              <span style={{ fontSize: "12.5px", fontWeight: "800", color: "#f2f0ff", letterSpacing: "-0.01em" }}>{s.title}</span>
-            </div>
-            <div style={{ fontSize: "11.5px", color: "rgba(242,240,255,.45)", lineHeight: "1.65" }}>
-              {s.body}
-            </div>
+      {/* ── HERO — the thesis, not a tab picker ── */}
+      <section style={{ padding: "56px 28px 40px", borderBottom: "1px solid var(--hairline)", textAlign: "center" }}>
+        <div style={{ maxWidth: "760px", margin: "0 auto" }}>
+          <div style={{
+            fontSize: "10px", fontWeight: "700", letterSpacing: ".14em", textTransform: "uppercase",
+            color: "var(--seal)", marginBottom: "16px",
+          }}>
+            Bonded verification protocol · Arc testnet
           </div>
-        ))}
+          <h1 className="display" style={{
+            fontSize: "clamp(30px, 4.2vw, 48px)", fontWeight: "700", letterSpacing: "-0.015em",
+            lineHeight: "1.12", color: "var(--paper)", marginBottom: "18px",
+          }}>
+            Agents make claims.<br />
+            <span style={{ color: "var(--seal)" }}>ArcID makes them put capital behind them.</span>
+          </h1>
+          <p style={{ fontSize: "15px", color: "var(--paper-muted)", lineHeight: "1.7", maxWidth: "560px", margin: "0 auto" }}>
+            Hardware-attested identity, bonded USDC collateral, and deterministic verification —
+            settled automatically on-chain, with no human in the loop.
+          </p>
+        </div>
+
+        {/* Mechanism flow */}
+        <div style={{
+          display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+          gap: "10px", maxWidth: "900px", margin: "40px auto 0",
+        }}>
+          {STEPS.map((s) => (
+            <div key={s.n} className="g" style={{ padding: "16px 14px", textAlign: "left" }}>
+              <div className="mono" style={{ fontSize: "11px", fontWeight: "700", color: "var(--seal)", marginBottom: "6px" }}>{s.n}</div>
+              <div style={{ fontSize: "12.5px", fontWeight: "600", color: "var(--paper)", marginBottom: "5px" }}>{s.title}</div>
+              <div style={{ fontSize: "10.5px", color: "var(--paper-faint)", lineHeight: "1.6" }}>{s.body}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Live counters */}
+        <div style={{ display: "flex", justifyContent: "center", gap: "0", marginTop: "36px" }}>
+          {[
+            ["bonded",     agentCount,  "Agents currently holding an active USDC/USYC bond — the collateral that makes their reputation real money, not a score."],
+            ["under seal", tvlDisplay,  "Total collateral currently posted across all bonded agents — this is what a confirmed breach draws from."],
+            ["slashed",    slashCount,  "Confirmed breaches where the bond contract has automatically paid the injured party out of the provider's collateral."],
+          ].map(([label, val, hint], i) => (
+            <div key={label} title={hint} style={{
+              padding: "0 22px", borderLeft: i > 0 ? "1px solid var(--hairline)" : "none",
+              textAlign: "center", cursor: "help",
+            }}>
+              <div className="mono" style={{
+                fontSize: "20px", fontWeight: "700",
+                color: loading ? "rgba(237,234,225,.15)" : (label === "slashed" && slashCount > 0) ? "var(--breach)" : "var(--paper)",
+              }}>
+                {loading ? "—" : val}
+              </div>
+              <div style={{ fontSize: "9px", color: "var(--paper-faint)", textTransform: "uppercase", letterSpacing: ".08em", marginTop: "3px" }}>{label}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ── LIVE APPLICATIONS — proof points, not products to pick between ── */}
+      <section style={{ padding: "40px 28px 12px", textAlign: "center" }}>
+        <div className="display" style={{ fontSize: "13px", fontWeight: "700", letterSpacing: ".08em", textTransform: "uppercase", color: "var(--paper-faint)" }}>
+          Live applications on Arc testnet
+        </div>
+        <p style={{ fontSize: "12px", color: "var(--paper-faint)", marginTop: "6px" }}>
+          Same protocol, two different claims being enforced
+        </p>
+      </section>
+
+      {/* ── App 1: Data SLA ── */}
+      <section ref={oracleRef} style={{ padding: "20px 28px 48px", borderBottom: "1px solid var(--hairline)" }}>
+        <AppHeader n="01" title="Data SLA Bond" desc="An oracle stakes collateral, sells price data per-call, and Claude checks whether it kept its promise — freshness, presence, a genuine signature." />
+        <div style={{
+          maxWidth: "1400px", margin: "0 auto", display: "grid",
+          gridTemplateColumns: "1fr 370px", gap: "16px", alignItems: "start",
+        }}>
+          <VerdictHistory verdicts={sorted} />
+          <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+            <AgentCard stats={stats} chainStats={chainStats} onCycleComplete={poll} />
+            <GrantMetricsCard stats={stats} chainStats={chainStats} />
+            <GatewayPaymentCard />
+            <USYCBondCard usyc={stats?.usyc} />
+            <TechDetails stats={stats} />
+          </div>
+        </div>
+      </section>
+
+      {/* ── App 2: Proof of Exploit ── */}
+      <section ref={exploitRef} style={{ padding: "40px 28px 56px" }}>
+        <AppHeader n="02" title="Proof-of-Exploit Bounty" desc="A researcher submits an exploit. It runs against a forked target — the invariant either breaks or it doesn't. No judgment call, no LLM in the payout path." />
+        <div style={{ maxWidth: "680px", margin: "0 auto" }}>
+          <div style={{
+            fontSize: "10.5px", color: "var(--paper-faint)", background: "rgba(0,0,0,.18)",
+            border: "1px solid var(--hairline)", borderRadius: "7px", padding: "10px 14px", marginBottom: "16px",
+          }}>
+            <b style={{ color: "var(--paper-muted)" }}>Scope, stated plainly:</b> this prototype covers one
+            registered exploit class (reentrancy) against one demo contract — proving the settlement
+            pipeline works end to end, not a general-purpose auditor yet.
+          </div>
+          <ProofOfExploitCard />
+        </div>
+      </section>
+
+      <footer style={{ padding: "24px 28px", borderTop: "1px solid var(--hairline)", textAlign: "center" }}>
+        <span style={{ fontSize: "10.5px", color: "var(--paper-faint)" }}>
+          Built for Encode × Arc × Circle — Programmable Money Hackathon
+        </span>
+      </footer>
+    </div>
+  );
+}
+
+function AppHeader({ n, title, desc }) {
+  return (
+    <div style={{ maxWidth: "1400px", margin: "0 auto 20px", display: "flex", alignItems: "baseline", gap: "14px" }}>
+      <span className="mono" style={{ fontSize: "13px", fontWeight: "700", color: "var(--seal)" }}>{n}</span>
+      <div>
+        <div className="display" style={{ fontSize: "20px", fontWeight: "700", letterSpacing: "-0.01em" }}>{title}</div>
+        <div style={{ fontSize: "11.5px", color: "var(--paper-muted)", marginTop: "3px", maxWidth: "640px" }}>{desc}</div>
       </div>
     </div>
   );
@@ -231,8 +227,8 @@ function TechDetails({ stats }) {
     <div>
       <button onClick={() => setOpen(v => !v)} style={{
         background: "none", border: "none", padding: "4px 0",
-        fontSize: "10px", color: "rgba(242,240,255,.2)",
-        letterSpacing: ".12em", textTransform: "uppercase", fontWeight: "600",
+        fontSize: "10px", color: "var(--paper-faint)",
+        letterSpacing: ".1em", textTransform: "uppercase", fontWeight: "500",
       }}>
         {open ? "▾" : "▸"} Technical details
       </button>
@@ -243,15 +239,15 @@ function TechDetails({ stats }) {
             ["Protocol",    "x402 nanopayments"],
             ["Collateral",  "USDC / USYC"],
             ["Registry",    "ArcIDRegistryV2 + DCAP"],
-            ["Adjudicator", "Claude Sonnet 4.6", "#c084fc"],
+            ["Adjudicator", "Claude Sonnet 4.6", "var(--seal)"],
             ["Consumer",    stats?.consumer ?? "0x8F43C6a0..."],
           ].map(([k, v, accent]) => (
             <div key={k} style={{
               display: "flex", justifyContent: "space-between",
-              padding: "5px 0", borderBottom: "1px solid rgba(255,255,255,.05)", fontSize: "10px",
+              padding: "5px 0", borderBottom: "1px solid var(--hairline)", fontSize: "10px",
             }}>
-              <span style={{ color: "rgba(242,240,255,.3)" }}>{k}</span>
-              <span className="mono" style={{ color: accent || "rgba(242,240,255,.7)", fontSize: "9px", maxWidth: "180px", textAlign: "right" }}>{v}</span>
+              <span style={{ color: "var(--paper-faint)" }}>{k}</span>
+              <span className="mono" style={{ color: accent || "var(--paper-muted)", fontSize: "9px", maxWidth: "180px", textAlign: "right" }}>{v}</span>
             </div>
           ))}
         </div>
