@@ -262,11 +262,28 @@ app.get("/api/verdict/:verdictHash", (req, res) => {
 // Nanopayments. One real payment per mechanism: this is NOT charged
 // alongside the existing /api/price call, and does not touch it.
 //
-// Cached in-memory by jobId (small map, not a rolling buffer — a demo-scale
-// number of concurrent jobs) so the payload generated for submit()'s
+// Cached in-memory by jobId so the payload generated for submit()'s
 // deliverable hash is the EXACT same payload later served to the
 // evaluator, not regenerated (prices/trend are randomized per call).
-const premiumAnalyses = {};
+//
+// Security hardening pass (see CHANGELOG.md): this route has no auth and
+// jobId is attacker-controlled — a plain object with no cap let anyone grow
+// this unboundedly (memory-exhaustion DoS) just by POSTing many distinct
+// jobIds, no payment or rate limit required. A Map preserves insertion
+// order, so a simple FIFO evict-oldest keeps this bounded regardless of
+// request volume, without needing a real auth/payment layer on a route
+// that's intentionally open (any job participant needs to fetch this by
+// jobId, not just whoever created it).
+const MAX_PREMIUM_ANALYSES = 1000;
+const premiumAnalyses = new Map();
+
+function setPremiumAnalysis(jobId, payload) {
+  if (premiumAnalyses.size >= MAX_PREMIUM_ANALYSES && !premiumAnalyses.has(jobId)) {
+    const oldestKey = premiumAnalyses.keys().next().value;
+    premiumAnalyses.delete(oldestKey);
+  }
+  premiumAnalyses.set(jobId, payload);
+}
 
 function generatePremiumAnalysis() {
   // Small synthetic rolling window (this call only — not persisted across
@@ -311,13 +328,13 @@ app.post("/api/premium-analysis", async (req, res) => {
   }
 
   const payload = { ...analysis, oracle: config.ORACLE_WALLET_ADDRESS, signature };
-  premiumAnalyses[jobId] = payload;
+  setPremiumAnalysis(jobId, payload);
 
   res.json({ payload, deliverableHash });
 });
 
 app.get("/api/premium-analysis/:jobId", (req, res) => {
-  const payload = premiumAnalyses[req.params.jobId];
+  const payload = premiumAnalyses.get(req.params.jobId);
   if (!payload) {
     return res.status(404).json({ error: "No premium analysis generated for this jobId yet — call POST /api/premium-analysis first." });
   }

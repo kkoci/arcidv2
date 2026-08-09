@@ -44,6 +44,7 @@ RUNBOOK.md
 SUBMISSION.md
 MARKETPLACE_LISTING.md
 phase8.1-notes.md
+SECURITY_AUDIT.md
 
 # Reference-only design packages — merged into frontend/src by hand, not tracked as-is
 seal-redesign-package/

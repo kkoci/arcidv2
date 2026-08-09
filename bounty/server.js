@@ -36,10 +36,51 @@
 require("dotenv").config({ path: require("path").join(__dirname, "..", ".env") });
 
 const express = require("express");
+const { ethers } = require("ethers");
 const { runExploit, submitOnChain, loadDeployment, requireEnvKey } = require("./harness");
 
 const PORT = process.env.BOUNTY_SERVER_PORT || 3002;
 const SUBMISSION_FEE_ATOMIC = "10000"; // $0.01 USDC (6 decimals) — anti-spam, not a real settlement in DEV_MODE
+
+// ---------------------------------------------------------------------------
+// Per-IP rate limit on /submit — security hardening pass (see CHANGELOG.md).
+// The x402 "anti-spam fee" above is decorative in DEV_MODE (any non-empty
+// X-Payment header passes, no real charge — stated honestly in this file's
+// own module comment already) — it provides zero actual deterrent. Every
+// /submit call is genuinely expensive server-side regardless of outcome: a
+// fresh Hardhat deployment + a real reentrancy attack simulation, then a
+// real Arc testnet transaction attempt. Independent from the payment
+// circuit breaker elsewhere in this codebase (that one caps USDC spend;
+// this caps request volume) — an attacker who never gets past this limit
+// never triggers a payment path at all. In-memory fixed-window counter,
+// same minimal-dependency style as oracle/index.js's checkCooldown() —
+// resets on server restart, which is fine for a demo-scale deployment.
+// ---------------------------------------------------------------------------
+const RATE_LIMIT_MAX      = parseInt(process.env.BOUNTY_RATE_LIMIT_MAX      || "5", 10);
+const RATE_LIMIT_WINDOW_MS = parseInt(process.env.BOUNTY_RATE_LIMIT_WINDOW_MS || String(60_000), 10);
+const submitHitsByIp = new Map(); // ip -> { count, windowStart }
+
+function checkSubmitRateLimit(req, res) {
+  const ip = req.ip || req.connection?.remoteAddress || "unknown";
+  const now = Date.now();
+  const entry = submitHitsByIp.get(ip);
+
+  if (!entry || now - entry.windowStart >= RATE_LIMIT_WINDOW_MS) {
+    submitHitsByIp.set(ip, { count: 1, windowStart: now });
+    return true;
+  }
+
+  if (entry.count >= RATE_LIMIT_MAX) {
+    const retryAfterSec = Math.ceil((entry.windowStart + RATE_LIMIT_WINDOW_MS - now) / 1000);
+    res.status(429)
+      .set("Retry-After", String(retryAfterSec))
+      .json({ error: `Rate limit exceeded — max ${RATE_LIMIT_MAX} exploit runs per ${RATE_LIMIT_WINDOW_MS / 1000}s per IP. Retry in ${retryAfterSec}s.` });
+    return false;
+  }
+
+  entry.count++;
+  return true;
+}
 
 const app = express();
 app.use(express.json());
@@ -90,10 +131,28 @@ app.get("/health", (req, res) => {
   res.json({ status: "ok", dev_mode: true, note: "DEV_MODE only — no real Gateway settlement wired for this vertical" });
 });
 
-app.post("/submit", devX402Middleware, async (req, res) => {
+app.post("/submit", (req, res, next) => {
+  // Rate limit runs before x402/payment gating and before anything else —
+  // cheapest possible check first, so a spammer never even reaches the
+  // (decorative, in DEV_MODE) payment step, let alone the real exploit run.
+  if (!checkSubmitRateLimit(req, res)) return; // checkSubmitRateLimit already sent the 429
+  next();
+}, devX402Middleware, async (req, res) => {
   const { targetId, researcher, mode } = req.body || {};
   if (targetId === undefined || !researcher) {
     return res.status(400).json({ error: "targetId and researcher are required" });
+  }
+
+  // Validate the address is well-formed BEFORE running anything expensive.
+  // Previously this only checked truthiness — a malformed researcher value
+  // would still trigger a full fresh-Hardhat-deploy + reentrancy-attack
+  // simulation and only fail at the very last step (on-chain submitVerdict()
+  // encoding), wasting exactly the CPU/gas cost the rate limit above exists
+  // to bound. ethers.isAddress() also accepts non-checksummed lowercase/
+  // uppercase input (same leniency ethers.Contract calls have downstream),
+  // it isn't stricter than what would eventually run — it just fails fast.
+  if (!ethers.isAddress(researcher)) {
+    return res.status(400).json({ error: `researcher must be a valid Ethereum address, got: ${String(researcher).slice(0, 100)}` });
   }
 
   let verifierKey, deployment;
