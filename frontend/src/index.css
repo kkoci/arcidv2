@@ -1,42 +1,49 @@
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 @keyframes pulse    { 0%,100%{opacity:1}50%{opacity:.35} }
 @keyframes slideIn  { from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)} }
 @keyframes crack    { 0%{stroke-dashoffset:24}100%{stroke-dashoffset:0} }
-@keyframes flashBreach { 0%,100%{box-shadow:0 0 0 0 rgba(216,72,60,0)}50%{box-shadow:0 0 36px 6px rgba(216,72,60,.35)} }
+@keyframes flashBreach { 0%,100%{box-shadow:0 0 0 0 rgba(229,72,77,0)}50%{box-shadow:0 0 36px 6px rgba(229,72,77,.28)} }
 
 :root {
-  /* The Ledger — ink, paper, brass. One hero accent, breach-red reserved. */
-  --ink:        #0A0C10;
-  --panel:      #14171D;
-  --panel-hi:   #1B1F27;
-  --hairline:   rgba(237,234,225,0.08);
-  --hairline-hi:rgba(237,234,225,0.14);
+  /* Light, modern-SaaS palette — Stripe/Linear/Mercury territory. One hero
+     accent (indigo), breach/settle reserved for actual breach/settle
+     moments only, never decorative. */
+  --bg:          #FAFAF9;   /* soft off-white base, not stark #fff */
+  --panel:       #FFFFFF;
+  --hairline:    rgba(20,20,25,0.08);
+  --hairline-hi: rgba(20,20,25,0.12);
 
-  --paper:      #EDEAE1;              /* primary text — warm paper, not pure white */
-  --paper-muted:rgba(237,234,225,0.52);
-  --paper-faint:rgba(237,234,225,0.30);
+  --text:        #17171A;   /* near-black primary text */
+  --text-muted:  rgba(23,23,26,0.56);
+  --text-faint:  rgba(23,23,26,0.36);
 
-  --seal:       #C08A3E;              /* hero accent — burnished brass. attestation, trust, capital at risk */
-  --seal-bright:#D9A85C;
-  --breach:     #D8483C;              /* reserved exclusively for slash/loss events */
-  --settle:     #7FB88F;              /* clean settlement — used sparingly, verdict feed only */
-  --amber:      #C9A94A;              /* fault-injection / testing state, distinct from seal */
+  --accent:      #5B5BF0;   /* indigo — single hero accent, replaces brass */
+  --accent-soft: #EEF0FE;   /* tint for accent backgrounds/pills */
+  --breach:      #E5484D;   /* loss/slash */
+  --breach-soft: #FDECEC;   /* soft tint — breach card backgrounds, not harsh red */
+  --settle:      #12A150;   /* success */
+  --settle-soft: #E7F6EE;
+
+  /* Warm amber — fault-injection/testing state only, distinct from accent
+     and breach; kept minimal (small tags, never a card background) so it
+     doesn't compete with the "one accent" rule. */
+  --amber:       #B45309;
+  --amber-soft:  #FEF3E2;
+
+  --shadow-sm: 0 1px 2px rgba(20,20,25,0.04), 0 1px 3px rgba(20,20,25,0.05);
+  --shadow-md: 0 4px 16px rgba(20,20,25,0.06), 0 2px 6px rgba(20,20,25,0.04);
+  --shadow-lg: 0 20px 48px rgba(20,20,25,0.10);
 }
 
 html { scroll-behavior: smooth; }
 
 body {
-  background-color: var(--ink);
-  /* Ledger paper — faint ruled lines, no glow orbs */
-  background-image:
-    linear-gradient(rgba(237,234,225,.035) 1px, transparent 1px);
-  background-size: 100% 28px;
-  background-attachment: fixed;
-  color: var(--paper);
-  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', system-ui, sans-serif;
   font-size: 13px;
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
@@ -45,27 +52,26 @@ body {
 
 #root { position: relative; z-index: 1; }
 
-/* Record utility — replaces glassmorphism with a quiet ledger card */
-.g  { background: var(--panel);    border: 1px solid var(--hairline);    border-radius: 10px; }
-.gh { background: var(--panel-hi); border: 1px solid var(--hairline-hi); border-radius: 10px; }
+/* Card utility — soft shadows on a white panel, not glow/hairline-on-black.
+   .g is the base card; .gh is the flagship/elevated card (more shadow, more
+   prominent hairline) — same distinction the dark theme made via panel vs
+   panel-hi, now expressed through elevation instead of a darker fill. */
+.g  { background: var(--panel); border: 1px solid var(--hairline);    border-radius: 14px; box-shadow: var(--shadow-sm); }
+.gh { background: var(--panel); border: 1px solid var(--hairline-hi); border-radius: 16px; box-shadow: var(--shadow-md); }
 
-/* No serif anywhere — headlines are IBM Plex Sans at a heavier weight,
-   not a separate display face. A loaded-vs-fallback serif was reading as
-   "Times New Roman" / Word-doc, so the safest fix is not depending on a
-   second font family loading at all. */
-h1, h2, .display { font-family: 'IBM Plex Sans', system-ui, sans-serif; font-weight: 700; }
+h1, h2, .display { font-family: 'Inter', system-ui, sans-serif; font-weight: 700; letter-spacing: -0.02em; }
 
 button {
   cursor: pointer;
-  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  font-family: 'Inter', system-ui, sans-serif;
   font-size: 12px;
-  border: none; border-radius: 7px;
+  border: none; border-radius: 8px;
   padding: 6px 12px;
   transition: all .15s;
 }
-button:hover:not(:disabled) { filter: brightness(1.15); transform: translateY(-1px); }
+button:hover:not(:disabled) { filter: brightness(1.08); transform: translateY(-1px); }
 button:active:not(:disabled){ transform: translateY(0) scale(.97); }
-button:disabled { opacity: .35; cursor: not-allowed; }
+button:disabled { opacity: .4; cursor: not-allowed; }
 
 a { color: inherit; }
 .mono { font-family: 'IBM Plex Mono', monospace; }
@@ -74,4 +80,10 @@ a { color: inherit; }
 
 /* Glossary hint — dotted underline signals "hover for explanation" on jargon
    (bond, slash, SLA, etc.) without needing a JS tooltip library. */
-.hint { border-bottom: 1px dotted var(--paper-faint); cursor: help; }
+.hint { border-bottom: 1px dotted var(--text-faint); cursor: help; }
+
+/* Subtle radial wash behind the hero — very light indigo, not a hard block. */
+.wash {
+  position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background: radial-gradient(60% 50% at 50% 0%, rgba(91,91,240,0.08), transparent 70%);
+}

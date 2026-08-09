@@ -6,7 +6,7 @@
 
 export default function SealMark({ state = "sealed", size = 28 }) {
   const broken = state === "broken";
-  const color  = broken ? "var(--breach)" : "var(--seal)";
+  const color  = broken ? "var(--breach)" : "var(--accent)";
 
   return (
     <svg

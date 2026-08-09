@@ -36,31 +36,30 @@ export default function GatewayPaymentCard() {
       <div style={{ padding: "14px 16px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "10px" }}>
           <div>
-            <div style={{ fontSize: "12px", fontWeight: "700", letterSpacing: "-.01em" }}>Circle Gateway Nanopayment</div>
-            <div style={{ fontSize: "10px", color: "var(--paper-faint)", marginTop: "2px" }}>
+            <div style={{ fontSize: "12px", fontWeight: "700", letterSpacing: "-.01em", color: "var(--text)" }}>Circle Gateway Nanopayment</div>
+            <div style={{ fontSize: "10px", color: "var(--text-faint)", marginTop: "2px" }}>
               x402 · batched USDC settlement
             </div>
           </div>
           <span style={{
-            fontSize: "9px", padding: "3px 10px", borderRadius: "4px",
-            background: "rgba(192,138,62,.1)", color: "var(--seal)",
-            border: `1px solid rgba(192,138,62,.28)`,
+            fontSize: "9px", padding: "3px 10px", borderRadius: "5px",
+            background: "var(--accent-soft)", color: "var(--accent)",
             fontWeight: "600", letterSpacing: ".08em", whiteSpace: "nowrap",
           }}>
             $0.001 / call
           </span>
         </div>
 
-        <div style={{ fontSize: "11px", color: "var(--paper-muted)", lineHeight: "1.7", marginBottom: "12px" }}>
-          Pays for one real <code style={{ color: "var(--seal)" }}>/api/price</code> call via Circle Gateway —
+        <div style={{ fontSize: "11px", color: "var(--text-muted)", lineHeight: "1.7", marginBottom: "12px" }}>
+          Pays for one real <code style={{ color: "var(--accent)" }}>/api/price</code> call via Circle Gateway —
           verified and settled by the live testnet facilitator, separate from the fault/slash demo above.
         </div>
 
         {!result && !error && (
           <div style={{ display: "flex", gap: "10px", marginBottom: "12px" }}>
-            <div style={{ flex: 1, padding: "9px 12px", borderRadius: "6px", background: "rgba(0,0,0,.18)" }}>
-              <div style={{ fontSize: "9px", color: "var(--paper-faint)", textTransform: "uppercase", letterSpacing: ".08em", fontWeight: "600" }}>Seller balance</div>
-              <div className="mono" style={{ fontSize: "16px", fontWeight: "700", color: "var(--paper)", marginTop: "2px" }}>
+            <div style={{ flex: 1, padding: "9px 12px", borderRadius: "8px", background: "rgba(20,20,25,.03)" }}>
+              <div style={{ fontSize: "9px", color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: ".08em", fontWeight: "600" }}>Seller balance</div>
+              <div className="mono" style={{ fontSize: "16px", fontWeight: "700", color: "var(--text)", marginTop: "2px" }}>
                 {balance?.balance ? fmtUsdc(Number(balance.balance.balance) + Number(balance.balance.pendingBatch)) : "—"}
               </div>
             </div>
@@ -69,13 +68,13 @@ export default function GatewayPaymentCard() {
 
         {result && (
           <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
-            <div style={{ flex: 1, padding: "9px 12px", borderRadius: "6px", background: "rgba(0,0,0,.18)" }}>
-              <div style={{ fontSize: "9px", color: "var(--paper-faint)", textTransform: "uppercase", letterSpacing: ".08em", fontWeight: "600" }}>Before</div>
-              <div className="mono" style={{ fontSize: "14px", fontWeight: "700", color: "var(--paper-muted)", marginTop: "2px" }}>{fmtUsdc(settled(before))}</div>
+            <div style={{ flex: 1, padding: "9px 12px", borderRadius: "8px", background: "rgba(20,20,25,.03)" }}>
+              <div style={{ fontSize: "9px", color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: ".08em", fontWeight: "600" }}>Before</div>
+              <div className="mono" style={{ fontSize: "14px", fontWeight: "700", color: "var(--text-muted)", marginTop: "2px" }}>{fmtUsdc(settled(before))}</div>
             </div>
-            <span style={{ color: "var(--seal)", fontSize: "16px", fontWeight: "700" }}>→</span>
-            <div style={{ flex: 1, padding: "9px 12px", borderRadius: "6px", background: "rgba(127,184,143,.06)", border: `1px solid rgba(127,184,143,.22)` }}>
-              <div style={{ fontSize: "9px", color: "var(--paper-faint)", textTransform: "uppercase", letterSpacing: ".08em", fontWeight: "600" }}>After</div>
+            <span style={{ color: "var(--accent)", fontSize: "16px", fontWeight: "700" }}>→</span>
+            <div style={{ flex: 1, padding: "9px 12px", borderRadius: "8px", background: "var(--settle-soft)", border: `1px solid rgba(18,161,80,.22)` }}>
+              <div style={{ fontSize: "9px", color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: ".08em", fontWeight: "600" }}>After</div>
               <div className="mono" style={{ fontSize: "14px", fontWeight: "700", color: "var(--settle)", marginTop: "2px" }}>{fmtUsdc(settled(after))}</div>
             </div>
           </div>
@@ -84,10 +83,11 @@ export default function GatewayPaymentCard() {
         <button onClick={pay} disabled={paying} style={{
           width: "100%", padding: "11px 16px",
           fontSize: "12px", fontWeight: "700", letterSpacing: "-.01em",
-          borderRadius: "7px",
-          background: paying ? "rgba(237,234,225,.05)" : "var(--seal)",
-          color: paying ? "var(--paper-faint)" : "#0A0C10",
+          borderRadius: "8px",
+          background: paying ? "rgba(20,20,25,.05)" : "var(--accent)",
+          color: paying ? "var(--text-faint)" : "#fff",
           border: "none", cursor: paying ? "not-allowed" : "pointer",
+          boxShadow: paying ? "none" : "var(--shadow-sm)",
           transition: "all .2s",
         }}>
           {paying ? "Paying via Circle Gateway…" : "Pay $0.001 for oracle price →"}

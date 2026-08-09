@@ -27,17 +27,17 @@ export default function GrantMetricsCard({ stats, chainStats }) {
         padding: "14px 16px",
         borderBottom: "1px solid var(--hairline)",
       }}>
-        <div style={{ fontSize: "9px", color: "var(--paper-faint)", textTransform: "uppercase", letterSpacing: ".1em", fontWeight: "600" }}>
+        <div style={{ fontSize: "9px", color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: ".1em", fontWeight: "600" }}>
           Trust Layer — Grant Metrics
         </div>
-        <div style={{ fontSize: "10px", color: "var(--paper-muted)", marginTop: "3px" }}>
+        <div style={{ fontSize: "10px", color: "var(--text-muted)", marginTop: "3px" }}>
           Deterministic vs. reasoned, challenge rate, cumulative throughput
         </div>
       </div>
 
       <div style={{ display: "flex" }}>
         <div title="Share of verdicts decided by mechanical checks alone (signature/freshness/schema) vs. ones that needed Claude's judgment call." style={{ flex: 1, padding: "11px 14px", borderRight: "1px solid var(--hairline)", cursor: "help" }}>
-          <div className="hint" style={{ fontSize: "9px", color: "var(--paper-faint)", textTransform: "uppercase", letterSpacing: ".08em", fontWeight: "600" }}>
+          <div className="hint" style={{ fontSize: "9px", color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: ".08em", fontWeight: "600" }}>
             Tier 1 (no LLM call)
           </div>
           {totalTiered > 0 ? (
@@ -45,35 +45,35 @@ export default function GrantMetricsCard({ stats, chainStats }) {
               <div className="mono" style={{ fontSize: "15px", fontWeight: "700", color: "var(--settle)", marginTop: "3px" }}>
                 {pct(detShare)}
               </div>
-              <div style={{ fontSize: "9px", color: "var(--paper-faint)", marginTop: "2px" }}>
+              <div style={{ fontSize: "9px", color: "var(--text-faint)", marginTop: "2px" }}>
                 {det} deterministic / {sem} reasoned
               </div>
             </>
           ) : (
-            <div className="mono" style={{ fontSize: "15px", fontWeight: "700", color: "var(--paper)", marginTop: "3px" }}>—</div>
+            <div className="mono" style={{ fontSize: "15px", fontWeight: "700", color: "var(--text)", marginTop: "3px" }}>—</div>
           )}
         </div>
 
         <div title="Share of large, non-obvious breaches held in a dispute window for owner review instead of slashing instantly." style={{ flex: 1, padding: "11px 14px", borderRight: "1px solid var(--hairline)", cursor: "help" }}>
-          <div className="hint" style={{ fontSize: "9px", color: "var(--paper-faint)", textTransform: "uppercase", letterSpacing: ".08em", fontWeight: "600" }}>
+          <div className="hint" style={{ fontSize: "9px", color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: ".08em", fontWeight: "600" }}>
             Challenge Rate
           </div>
-          <div className="mono" style={{ fontSize: "15px", fontWeight: "700", color: hasDisputes ? "var(--amber)" : "var(--paper)", marginTop: "3px" }}>
+          <div className="mono" style={{ fontSize: "15px", fontWeight: "700", color: hasDisputes ? "var(--amber)" : "var(--text)", marginTop: "3px" }}>
             {pct(disputeRate)}
           </div>
-          <div style={{ fontSize: "9px", color: "var(--paper-faint)", marginTop: "2px" }}>
+          <div style={{ fontSize: "9px", color: "var(--text-faint)", marginTop: "2px" }}>
             {chainStats?.summary?.totalIndictments ?? 0} indicted / {chainStats?.summary?.totalSlashes ?? 0} instant
           </div>
         </div>
 
         <div title="Cumulative USDC that has actually moved through bonded services — slashed to injured parties plus settled to honest providers." style={{ flex: 1, padding: "11px 14px", cursor: "help" }}>
-          <div className="hint" style={{ fontSize: "9px", color: "var(--paper-faint)", textTransform: "uppercase", letterSpacing: ".08em", fontWeight: "600" }}>
+          <div className="hint" style={{ fontSize: "9px", color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: ".08em", fontWeight: "600" }}>
             Throughput
           </div>
-          <div className="mono" style={{ fontSize: "15px", fontWeight: "700", color: "var(--seal)", marginTop: "3px" }}>
+          <div className="mono" style={{ fontSize: "15px", fontWeight: "700", color: "var(--accent)", marginTop: "3px" }}>
             {usd(throughput)}
           </div>
-          <div style={{ fontSize: "9px", color: "var(--paper-faint)", marginTop: "2px" }}>
+          <div style={{ fontSize: "9px", color: "var(--text-faint)", marginTop: "2px" }}>
             slashed + settled, cumulative
           </div>
         </div>

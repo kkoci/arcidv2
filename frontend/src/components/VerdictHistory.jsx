@@ -33,17 +33,17 @@ export default function VerdictHistory({ verdicts }) {
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "14px" }}>
         <div>
-          <div className="display" style={{ fontSize: "18px", fontWeight: "600", letterSpacing: "-0.01em" }}>
+          <div className="display" style={{ fontSize: "18px", fontWeight: "600", letterSpacing: "-0.01em", color: "var(--text)" }}>
             Adjudication Feed
           </div>
-          <div style={{ fontSize: "11px", color: "var(--paper-faint)", marginTop: "3px" }}>
+          <div style={{ fontSize: "11px", color: "var(--text-faint)", marginTop: "3px" }}>
             Every verdict is on-chain · click any tx to verify
           </div>
         </div>
         <span
           className="mono"
           title="This feed only holds verdicts from the current oracle session — it resets on restart. The bond contract's real slash count (shown on the oracle card) is cumulative on-chain history and isn't expected to match this number."
-          style={{ fontSize: "11px", color: "var(--paper-faint)", cursor: "help", borderBottom: "1px dotted var(--paper-faint)" }}
+          style={{ fontSize: "11px", color: "var(--text-faint)", cursor: "help", borderBottom: "1px dotted var(--text-faint)" }}
         >
           {verdicts.length} this session
         </span>
@@ -63,10 +63,10 @@ function EmptyState() {
       minHeight: "360px",
     }}>
       <SealMark state="sealed" size={48} />
-      <div className="display" style={{ fontSize: "19px", fontWeight: "600", letterSpacing: "-0.01em", marginTop: "18px", marginBottom: "10px" }}>
+      <div className="display" style={{ fontSize: "19px", fontWeight: "600", letterSpacing: "-0.01em", marginTop: "18px", marginBottom: "10px", color: "var(--text)" }}>
         Nothing has broken the seal yet
       </div>
-      <div style={{ fontSize: "13px", color: "var(--paper-muted)", lineHeight: "1.9", maxWidth: "300px" }}>
+      <div style={{ fontSize: "13px", color: "var(--text-muted)", lineHeight: "1.9", maxWidth: "300px" }}>
         Pick a fault mode, then hit{" "}
         <span style={{ color: "var(--breach)", fontWeight: "600" }}>Oracle cheated. Break the seal.</span>
         <br />Claude reads the evidence. On-chain in seconds.
@@ -86,8 +86,8 @@ function Card({ v }) {
   const { lead, body } = splitReason(v.reason);
 
   const accent = isBreach ? "var(--breach)" : "var(--settle)";
-  const dimBg  = isBreach ? "rgba(216,72,60,.06)"  : "rgba(127,184,143,.05)";
-  const bdr    = isBreach ? "rgba(216,72,60,.28)"  : "rgba(127,184,143,.2)";
+  const dimBg  = isBreach ? "var(--breach-soft)" : "var(--settle-soft)";
+  const bdr    = isBreach ? "rgba(229,72,77,.28)" : "rgba(18,161,80,.2)";
 
   return (
     <div className="g slide-in" style={{ overflow: "hidden", borderColor: bdr }}>
@@ -109,50 +109,50 @@ function Card({ v }) {
           </span>
           {v.fault_mode && (
             <span className="mono" style={{
-              fontSize: "9px", padding: "2px 8px", borderRadius: "4px",
-              background: "rgba(201,169,74,.12)", color: "var(--amber)",
-              border: "1px solid rgba(201,169,74,.28)", fontWeight: "600",
+              fontSize: "9px", padding: "2px 8px", borderRadius: "5px",
+              background: "var(--amber-soft)", color: "var(--amber)",
+              border: "1px solid rgba(180,83,9,.28)", fontWeight: "600",
             }}>
               {v.fault_mode}
             </span>
           )}
         </div>
-        <span className="mono" style={{ fontSize: "10px", color: "var(--paper-faint)" }}>
+        <span className="mono" style={{ fontSize: "10px", color: "var(--text-faint)" }}>
           {ago != null ? `${ago}s ago` : ""}
         </span>
       </div>
 
       {/* Body */}
       <div style={{ padding: "16px 18px" }}>
-        <div style={{ fontSize: "15px", fontWeight: "600", letterSpacing: "-0.01em", marginBottom: "14px", color: "var(--paper)", lineHeight: "1.3" }}>
+        <div style={{ fontSize: "15px", fontWeight: "600", letterSpacing: "-0.01em", marginBottom: "14px", color: "var(--text)", lineHeight: "1.3" }}>
           {headline(v)}
         </div>
 
         {/* Claude reasoning block */}
         {lead && (
           <div style={{
-            padding: "14px 16px", borderRadius: "7px",
-            background: "rgba(0,0,0,.22)",
-            borderLeft: `2px solid var(--seal)`,
+            padding: "14px 16px", borderRadius: "10px",
+            background: "var(--accent-soft)",
+            borderLeft: `2px solid var(--accent)`,
             marginBottom: "14px",
           }}>
             <div style={{
               fontSize: "9px", fontWeight: "600", letterSpacing: ".1em",
               textTransform: "uppercase", marginBottom: "10px",
-              color: "var(--seal)",
+              color: "var(--accent)",
               display: "flex", alignItems: "center", gap: "6px",
             }}>
               Claude Sonnet 4.6 · Finding
             </div>
 
-            <div style={{ fontSize: "14px", fontWeight: "500", color: "var(--paper)", lineHeight: "1.55", marginBottom: body ? "12px" : "0" }}>
+            <div style={{ fontSize: "14px", fontWeight: "500", color: "var(--text)", lineHeight: "1.55", marginBottom: body ? "12px" : "0" }}>
               {lead}
             </div>
 
             {body && (
               <>
                 {expanded && (
-                  <div style={{ fontSize: "12px", color: "var(--paper-muted)", lineHeight: "1.85", marginBottom: "10px" }}>
+                  <div style={{ fontSize: "12px", color: "var(--text-muted)", lineHeight: "1.85", marginBottom: "10px" }}>
                     {body}
                   </div>
                 )}
@@ -160,7 +160,7 @@ function Card({ v }) {
                   onClick={() => setExpanded(x => !x)}
                   style={{
                     background: "none", border: "none", padding: "0",
-                    fontSize: "10px", color: "var(--seal)",
+                    fontSize: "10px", color: "var(--accent)",
                     cursor: "pointer", fontWeight: "600", letterSpacing: ".06em",
                     opacity: .85,
                   }}
@@ -178,8 +178,8 @@ function Card({ v }) {
             <a href={`${ARCSCAN}${v.slash_tx}`} target="_blank" rel="noreferrer"
               style={{
                 display: "inline-flex", alignItems: "center", gap: "6px",
-                padding: "5px 12px", borderRadius: "5px",
-                background: "rgba(216,72,60,.12)", border: "1px solid rgba(216,72,60,.28)",
+                padding: "5px 12px", borderRadius: "6px",
+                background: "var(--breach-soft)", border: "1px solid rgba(229,72,77,.28)",
                 color: "var(--breach)", fontSize: "10px", fontWeight: "600",
                 fontFamily: "'IBM Plex Mono', monospace", textDecoration: "none",
               }}

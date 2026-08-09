@@ -68,15 +68,15 @@ export default function AgentCard({ stats, chainStats, onCycleComplete }) {
           padding: "14px 16px",
           borderBottom: "1px solid var(--hairline)",
           display: "flex", alignItems: "center", gap: "12px",
-          background: isSlashed ? "rgba(216,72,60,.06)" : "transparent",
+          background: isSlashed ? "var(--breach-soft)" : "transparent",
           transition: "background .6s",
         }}>
           <SealMark state={isSlashed ? "broken" : "sealed"} size={30} />
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: "9px", color: "var(--paper-faint)", textTransform: "uppercase", letterSpacing: ".1em", fontWeight: "600" }}>
+            <div style={{ fontSize: "9px", color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: ".1em", fontWeight: "600" }}>
               Price Oracle
             </div>
-            <div className="mono" style={{ fontSize: "10px", color: "var(--paper-muted)", marginTop: "3px" }}>
+            <div className="mono" style={{ fontSize: "10px", color: "var(--text-muted)", marginTop: "3px" }}>
               {fmt(stats?.oracle ?? ORACLE_ADDR)}
             </div>
           </div>
@@ -86,15 +86,15 @@ export default function AgentCard({ stats, chainStats, onCycleComplete }) {
         {/* Stats row */}
         <div style={{ display: "flex" }}>
           {[
-            ["Bond",          fmtUsdc(oracle?.amount),                    isSlashed ? "var(--breach)" : "var(--paper)", "USDC/USYC collateral this oracle currently has locked on-chain — what a confirmed breach would draw from."],
-            ["Calls",         stats?.totalCalls ?? 0,                     "var(--paper)",                               "Total paid /api/price requests served so far, this session."],
-            ["Slashes (all-time)", chainStats?.summary?.totalSlashes ?? 0, (chainStats?.summary?.totalSlashes ?? 0) > 0 ? "var(--breach)" : "var(--paper)", "Read directly from on-chain AgentSlashed events — every confirmed breach ever recorded against this bond contract, not just this session. The Adjudication Feed below only shows verdicts from the current oracle session, so these two counts are expected to differ."],
+            ["Bond",          fmtUsdc(oracle?.amount),                    isSlashed ? "var(--breach)" : "var(--text)", "USDC/USYC collateral this oracle currently has locked on-chain — what a confirmed breach would draw from."],
+            ["Calls",         stats?.totalCalls ?? 0,                     "var(--text)",                               "Total paid /api/price requests served so far, this session."],
+            ["Slashes (all-time)", chainStats?.summary?.totalSlashes ?? 0, (chainStats?.summary?.totalSlashes ?? 0) > 0 ? "var(--breach)" : "var(--text)", "Read directly from on-chain AgentSlashed events — every confirmed breach ever recorded against this bond contract, not just this session. The Adjudication Feed below only shows verdicts from the current oracle session, so these two counts are expected to differ."],
           ].map(([lbl, val, color, hint], i) => (
             <div key={lbl} title={hint} style={{
               flex: 1, padding: "11px 14px", cursor: "help",
               borderRight: i < 2 ? "1px solid var(--hairline)" : "none",
             }}>
-              <div className="hint" style={{ fontSize: "9px", color: "var(--paper-faint)", textTransform: "uppercase", letterSpacing: ".08em", fontWeight: "600" }}>{lbl}</div>
+              <div className="hint" style={{ fontSize: "9px", color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: ".08em", fontWeight: "600" }}>{lbl}</div>
               <div className="mono" style={{ fontSize: "15px", fontWeight: "600", color, marginTop: "3px" }}>{val}</div>
             </div>
           ))}
@@ -102,7 +102,7 @@ export default function AgentCard({ stats, chainStats, onCycleComplete }) {
 
         {/* Fault injection */}
         <div style={{ padding: "11px 15px", borderTop: "1px solid var(--hairline)" }}>
-          <div className="hint" style={{ fontSize: "9px", color: "var(--paper-faint)", textTransform: "uppercase", letterSpacing: ".1em", fontWeight: "600", marginBottom: "7px", display: "inline-block" }}
+          <div className="hint" style={{ fontSize: "9px", color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: ".1em", fontWeight: "600", marginBottom: "7px", display: "inline-block" }}
             title="Make the oracle misbehave on its next response, so you can watch the consumer agent catch it and break the seal in real time.">
             Inject fault → Claude detects → seal breaks
           </div>
@@ -111,23 +111,23 @@ export default function AgentCard({ stats, chainStats, onCycleComplete }) {
               <button key={mode} title={hint} onClick={() => injectFault(mode)} disabled={busy} style={{
                 padding: "4px 11px", fontSize: "10px",
                 fontFamily: "'IBM Plex Mono', monospace", fontWeight: "600",
-                borderRadius: "5px",
-                background: activeFault === mode ? "rgba(216,72,60,.16)"     : "rgba(237,234,225,.05)",
-                color:      activeFault === mode ? "var(--breach)"           : "var(--paper-muted)",
-                border:     `1px solid ${activeFault === mode ? "rgba(216,72,60,.4)" : "var(--hairline-hi)"}`,
+                borderRadius: "6px",
+                background: activeFault === mode ? "var(--breach-soft)"      : "rgba(20,20,25,.04)",
+                color:      activeFault === mode ? "var(--breach)"           : "var(--text-muted)",
+                border:     `1px solid ${activeFault === mode ? "rgba(229,72,77,.4)" : "var(--hairline-hi)"}`,
                 transition: "all .15s",
               }}>
                 {mode}
               </button>
             ))}
             <button onClick={resetFault} disabled={busy || !activeFault} style={{
-              padding: "4px 10px", fontSize: "10px", borderRadius: "5px",
-              background: "rgba(237,234,225,.03)", color: "var(--paper-faint)",
+              padding: "4px 10px", fontSize: "10px", borderRadius: "6px",
+              background: "rgba(20,20,25,.03)", color: "var(--text-faint)",
               border: "1px solid var(--hairline)",
             }}>
               reset
             </button>
-            {msg && <span className="mono" style={{ fontSize: "9px", color: "var(--paper-muted)" }}>{msg}</span>}
+            {msg && <span className="mono" style={{ fontSize: "9px", color: "var(--text-muted)" }}>{msg}</span>}
           </div>
         </div>
 
@@ -139,25 +139,26 @@ export default function AgentCard({ stats, chainStats, onCycleComplete }) {
             style={{
               width: "100%", padding: "13px 18px",
               fontSize: "13px", fontWeight: "700", letterSpacing: "-.01em",
-              borderRadius: "8px",
-              background: triggering ? "rgba(237,234,225,.05)" : "var(--breach)",
-              color: triggering ? "var(--paper-faint)" : "#EDEAE1",
+              borderRadius: "10px",
+              background: triggering ? "rgba(20,20,25,.05)" : "var(--breach)",
+              color: triggering ? "var(--text-faint)" : "#fff",
               cursor: triggering ? "not-allowed" : "pointer",
+              boxShadow: triggering ? "none" : "var(--shadow-sm)",
               transition: "all .2s",
             }}
           >
             {triggering ? "Claude is adjudicating…" : "Oracle cheated. Break the seal. →"}
           </button>
           {!triggering && (
-            <div style={{ fontSize: "10px", color: "var(--paper-faint)", textAlign: "center", marginTop: "7px" }}>
+            <div style={{ fontSize: "10px", color: "var(--text-faint)", textAlign: "center", marginTop: "7px" }}>
               Claude decides · USDC moves on-chain · live
             </div>
           )}
           {result && (
             <div style={{
-              marginTop: "10px", padding: "11px 13px", borderRadius: "7px",
-              background: "rgba(0,0,0,.25)",
-              border: `1px solid ${result.verdict === "breach" ? "rgba(216,72,60,.3)" : "rgba(127,184,143,.25)"}`,
+              marginTop: "10px", padding: "11px 13px", borderRadius: "10px",
+              background: result.verdict === "breach" ? "var(--breach-soft)" : "var(--settle-soft)",
+              border: `1px solid ${result.verdict === "breach" ? "rgba(229,72,77,.3)" : "rgba(18,161,80,.25)"}`,
             }}>
               <div className="mono" style={{ fontSize: "13px", fontWeight: "700",
                 color: result.verdict === "breach" ? "var(--breach)" : "var(--settle)" }}>
@@ -165,7 +166,7 @@ export default function AgentCard({ stats, chainStats, onCycleComplete }) {
               </div>
               {result.slashTx && (
                 <a href={`${ARCSCAN}${result.slashTx}`} target="_blank" rel="noreferrer"
-                  className="mono" style={{ fontSize: "9px", color: "var(--seal)", textDecoration: "none", display: "block", marginTop: "4px" }}>
+                  className="mono" style={{ fontSize: "9px", color: "var(--accent)", textDecoration: "none", display: "block", marginTop: "4px" }}>
                   {result.slashTx.slice(0,26)}… ↗
                 </a>
               )}
@@ -179,7 +180,7 @@ export default function AgentCard({ stats, chainStats, onCycleComplete }) {
         <div className="g" style={{ overflow: "hidden" }}>
           <div style={{
             padding: "9px 14px", borderBottom: "1px solid var(--hairline)",
-            fontSize: "9px", color: "var(--paper-faint)",
+            fontSize: "9px", color: "var(--text-faint)",
             textTransform: "uppercase", letterSpacing: ".1em", fontWeight: "600",
           }}>
             Registered agents ({agents.length})
@@ -191,16 +192,16 @@ export default function AgentCard({ stats, chainStats, onCycleComplete }) {
               <div key={a.address} style={{
                 display: "flex", alignItems: "center", justifyContent: "space-between",
                 padding: "9px 14px", borderBottom: "1px solid var(--hairline)",
-                background: a.slashed ? "rgba(216,72,60,.04)" : "transparent",
+                background: a.slashed ? "var(--breach-soft)" : "transparent",
               }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                   <SealMark state={a.slashed ? "broken" : "sealed"} size={15} />
-                  <span className="mono" style={{ fontSize: "10px", color: "var(--paper-muted)" }}>
+                  <span className="mono" style={{ fontSize: "10px", color: "var(--text-muted)" }}>
                     {fmt(a.address)}{isO ? " · oracle" : ""}
                   </span>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                  <span className="mono" style={{ fontSize: "11px", fontWeight: "600" }}>{fmtUsdc(a.amount)}</span>
+                  <span className="mono" style={{ fontSize: "11px", fontWeight: "600", color: "var(--text)" }}>{fmtUsdc(a.amount)}</span>
                   <Pill status={st} small />
                 </div>
               </div>
@@ -213,19 +214,17 @@ export default function AgentCard({ stats, chainStats, onCycleComplete }) {
 }
 
 function Pill({ status, small }) {
-  const { color, label, hint } = {
-    active:   { color: "var(--settle)", label: "sealed",  hint: "Bond is posted and unslashed — this agent is currently allowed to sell service." },
-    slashed:  { color: "var(--breach)", label: "broken",  hint: "This agent's bond has been paid out after a confirmed breach — it can re-bond to sell again." },
-    "no bond":{ color: "var(--paper-faint)", label: "no bond", hint: "This wallet isn't TEE-registered or hasn't posted collateral yet — it can't sell service." },
-  }[status] ?? { color: "var(--paper-faint)", label: "—", hint: undefined };
+  const { bg, color, label, hint } = {
+    active:   { bg: "var(--settle-soft)", color: "var(--settle)",    label: "sealed",  hint: "Bond is posted and unslashed — this agent is currently allowed to sell service." },
+    slashed:  { bg: "var(--breach-soft)", color: "var(--breach)",    label: "broken",  hint: "This agent's bond has been paid out after a confirmed breach — it can re-bond to sell again." },
+    "no bond":{ bg: "rgba(20,20,25,.04)", color: "var(--text-faint)", label: "no bond", hint: "This wallet isn't TEE-registered or hasn't posted collateral yet — it can't sell service." },
+  }[status] ?? { bg: "rgba(20,20,25,.04)", color: "var(--text-faint)", label: "—", hint: undefined };
 
   return (
     <div title={hint} style={{
       padding: small ? "2px 8px" : "3px 10px",
-      borderRadius: "4px", fontSize: "10px", fontWeight: "600",
-      background: "transparent", color,
-      border: `1px solid ${color}`,
-      opacity: 0.85,
+      borderRadius: "6px", fontSize: "10px", fontWeight: "600",
+      background: bg, color,
       whiteSpace: "nowrap", transition: "all .5s",
       cursor: hint ? "help" : "default",
     }}>

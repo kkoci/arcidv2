@@ -86,7 +86,7 @@ export default function App() {
       {/* ── Header — brand + jump-nav, not a product picker ── */}
       <header style={{
         position: "sticky", top: 0, zIndex: 100,
-        background: "rgba(10,12,16,.9)", backdropFilter: "blur(14px)",
+        background: "rgba(250,249,247,.82)", backdropFilter: "blur(14px)",
         borderBottom: "1px solid var(--hairline)",
         padding: "0 28px", display: "flex", alignItems: "center", height: "58px", gap: "20px",
       }}>
@@ -94,19 +94,19 @@ export default function App() {
           <SealMark state="sealed" size={24} />
           <span className="display" style={{ fontSize: "17px", fontWeight: "700" }}>ArcID</span>
           <span style={{
-            fontSize: "9px", padding: "2px 8px", borderRadius: "3px",
-            background: "rgba(192,138,62,.12)", color: "var(--seal)",
-            border: "1px solid rgba(192,138,62,.3)", fontWeight: "600", letterSpacing: ".1em",
+            fontSize: "9px", padding: "2px 8px", borderRadius: "4px",
+            background: "var(--accent-soft)", color: "var(--accent)",
+            fontWeight: "600", letterSpacing: ".1em",
           }}>TESTNET</span>
         </div>
         <div style={{ flex: 1 }} />
         <button onClick={() => scrollTo(oracleRef)} style={{
-          background: "none", border: "1px solid var(--hairline-hi)", color: "var(--paper-muted)",
-          padding: "6px 14px", fontSize: "11px", borderRadius: "6px",
+          background: "none", border: "1px solid var(--hairline-hi)", color: "var(--text-muted)",
+          padding: "6px 14px", fontSize: "11px", borderRadius: "8px",
         }}>01 · Data SLA</button>
         <button onClick={() => scrollTo(exploitRef)} style={{
-          background: "none", border: "1px solid var(--hairline-hi)", color: "var(--paper-muted)",
-          padding: "6px 14px", fontSize: "11px", borderRadius: "6px",
+          background: "none", border: "1px solid var(--hairline-hi)", color: "var(--text-muted)",
+          padding: "6px 14px", fontSize: "11px", borderRadius: "8px",
         }}>02 · Exploit Bounty</button>
         <div style={{ display: "flex", alignItems: "center", gap: "6px", marginLeft: "8px" }}>
           <div style={{
@@ -114,44 +114,56 @@ export default function App() {
             background: live ? "var(--settle)" : "var(--breach)",
             animation: live ? "pulse 2.5s infinite" : "none",
           }} />
-          <span className="mono" style={{ fontSize: "10px", color: "var(--paper-faint)" }}>
+          <span className="mono" style={{ fontSize: "10px", color: "var(--text-faint)" }}>
             {live ? lastPoll?.toLocaleTimeString() : "offline"}
           </span>
         </div>
       </header>
 
       {/* ── HERO — the thesis, not a tab picker ── */}
-      <section style={{ padding: "56px 28px 40px", borderBottom: "1px solid var(--hairline)", textAlign: "center" }}>
+      <section style={{ position: "relative", padding: "64px 28px 44px", borderBottom: "1px solid var(--hairline)", textAlign: "center", overflow: "hidden" }}>
+        <div className="wash" />
         <div style={{ maxWidth: "760px", margin: "0 auto" }}>
           <div style={{
             fontSize: "10px", fontWeight: "700", letterSpacing: ".14em", textTransform: "uppercase",
-            color: "var(--seal)", marginBottom: "16px",
+            color: "var(--accent)", marginBottom: "18px",
           }}>
             Bonded verification protocol · Arc testnet
           </div>
           <h1 className="display" style={{
-            fontSize: "clamp(30px, 4.2vw, 48px)", fontWeight: "700", letterSpacing: "-0.015em",
-            lineHeight: "1.12", color: "var(--paper)", marginBottom: "18px",
+            fontSize: "clamp(34px, 4.8vw, 56px)", fontWeight: "800", letterSpacing: "-0.02em",
+            lineHeight: "1.1", color: "var(--text)", marginBottom: "20px",
           }}>
             Machine-to-machine payments happen too fast to review by hand.<br />
-            <span style={{ color: "var(--seal)" }}>ArcID bonds collateral and settles automatically.</span>
+            <span style={{
+              background: "linear-gradient(90deg, #5B5BF0, #8B5CF6)",
+              WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent",
+            }}>ArcID</span> bonds collateral and settles automatically.
           </h1>
-          <p style={{ fontSize: "15px", color: "var(--paper-muted)", lineHeight: "1.7", maxWidth: "560px", margin: "0 auto" }}>
+          <p style={{ fontSize: "16px", color: "var(--text-muted)", lineHeight: "1.7", maxWidth: "560px", margin: "0 auto 28px" }}>
             Real USDC collateral behind hardware-attested identity, paid over x402 nanopayments —
             deterministic checks where possible, an AI adjudicator only where judgment is genuinely required.
           </p>
+          <button onClick={() => scrollTo(oracleRef)} style={{
+            background: "var(--accent)", color: "#fff",
+            padding: "13px 26px", fontSize: "14px", fontWeight: "700",
+            borderRadius: "10px", letterSpacing: "-.01em",
+            boxShadow: "var(--shadow-md)",
+          }}>
+            Watch a live slash →
+          </button>
         </div>
 
         {/* Mechanism flow */}
         <div style={{
           display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
-          gap: "10px", maxWidth: "900px", margin: "40px auto 0",
+          gap: "10px", maxWidth: "900px", margin: "44px auto 0",
         }}>
           {STEPS.map((s) => (
             <div key={s.n} className="g" style={{ padding: "16px 14px", textAlign: "left" }}>
-              <div className="mono" style={{ fontSize: "11px", fontWeight: "700", color: "var(--seal)", marginBottom: "6px" }}>{s.n}</div>
-              <div style={{ fontSize: "12.5px", fontWeight: "600", color: "var(--paper)", marginBottom: "5px" }}>{s.title}</div>
-              <div style={{ fontSize: "10.5px", color: "var(--paper-faint)", lineHeight: "1.6" }}>{s.body}</div>
+              <div className="mono" style={{ fontSize: "11px", fontWeight: "700", color: "var(--accent)", marginBottom: "6px" }}>{s.n}</div>
+              <div style={{ fontSize: "12.5px", fontWeight: "600", color: "var(--text)", marginBottom: "5px" }}>{s.title}</div>
+              <div style={{ fontSize: "10.5px", color: "var(--text-faint)", lineHeight: "1.6" }}>{s.body}</div>
             </div>
           ))}
         </div>
@@ -169,11 +181,11 @@ export default function App() {
             }}>
               <div className="mono" style={{
                 fontSize: "20px", fontWeight: "700",
-                color: loading ? "rgba(237,234,225,.15)" : (label === "slashed" && slashCount > 0) ? "var(--breach)" : "var(--paper)",
+                color: loading ? "rgba(23,23,26,.18)" : (label === "slashed" && slashCount > 0) ? "var(--breach)" : "var(--text)",
               }}>
                 {loading ? "—" : val}
               </div>
-              <div style={{ fontSize: "9px", color: "var(--paper-faint)", textTransform: "uppercase", letterSpacing: ".08em", marginTop: "3px" }}>{label}</div>
+              <div style={{ fontSize: "9px", color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: ".08em", marginTop: "3px" }}>{label}</div>
             </div>
           ))}
         </div>
@@ -181,10 +193,10 @@ export default function App() {
 
       {/* ── LIVE APPLICATIONS — proof points, not products to pick between ── */}
       <section style={{ padding: "40px 28px 12px", textAlign: "center" }}>
-        <div className="display" style={{ fontSize: "13px", fontWeight: "700", letterSpacing: ".08em", textTransform: "uppercase", color: "var(--paper-faint)" }}>
+        <div className="display" style={{ fontSize: "13px", fontWeight: "700", letterSpacing: ".08em", textTransform: "uppercase", color: "var(--text-faint)" }}>
           Live applications on Arc testnet
         </div>
-        <p style={{ fontSize: "12px", color: "var(--paper-faint)", marginTop: "6px" }}>
+        <p style={{ fontSize: "12px", color: "var(--text-faint)", marginTop: "6px" }}>
           Same protocol, two different claims being enforced
         </p>
       </section>
@@ -212,10 +224,10 @@ export default function App() {
         <AppHeader n="02" title="Proof-of-Exploit Bounty" desc="A researcher submits an exploit. It runs against a forked target — the invariant either breaks or it doesn't. No judgment call, no LLM in the payout path." />
         <div style={{ maxWidth: "680px", margin: "0 auto" }}>
           <div style={{
-            fontSize: "10.5px", color: "var(--paper-faint)", background: "rgba(0,0,0,.18)",
-            border: "1px solid var(--hairline)", borderRadius: "7px", padding: "10px 14px", marginBottom: "16px",
+            fontSize: "10.5px", color: "var(--text-faint)", background: "var(--accent-soft)",
+            border: "1px solid var(--hairline)", borderRadius: "10px", padding: "10px 14px", marginBottom: "16px",
           }}>
-            <b style={{ color: "var(--paper-muted)" }}>Scope, stated plainly:</b> this prototype covers one
+            <b style={{ color: "var(--text-muted)" }}>Scope, stated plainly:</b> this prototype covers one
             registered exploit class (reentrancy) against one demo contract — proving the settlement
             pipeline works end to end, not a general-purpose auditor yet.
           </div>
@@ -224,7 +236,7 @@ export default function App() {
       </section>
 
       <footer style={{ padding: "24px 28px", borderTop: "1px solid var(--hairline)", textAlign: "center" }}>
-        <span style={{ fontSize: "10.5px", color: "var(--paper-faint)" }}>
+        <span style={{ fontSize: "10.5px", color: "var(--text-faint)" }}>
           Built for Encode × Arc × Circle — Programmable Money Hackathon
         </span>
       </footer>
@@ -235,10 +247,10 @@ export default function App() {
 function AppHeader({ n, title, desc }) {
   return (
     <div style={{ maxWidth: "1400px", margin: "0 auto 20px", display: "flex", alignItems: "baseline", gap: "14px" }}>
-      <span className="mono" style={{ fontSize: "13px", fontWeight: "700", color: "var(--seal)" }}>{n}</span>
+      <span className="mono" style={{ fontSize: "13px", fontWeight: "700", color: "var(--accent)" }}>{n}</span>
       <div>
-        <div className="display" style={{ fontSize: "20px", fontWeight: "700", letterSpacing: "-0.01em" }}>{title}</div>
-        <div style={{ fontSize: "11.5px", color: "var(--paper-muted)", marginTop: "3px", maxWidth: "640px" }}>{desc}</div>
+        <div className="display" style={{ fontSize: "20px", fontWeight: "700", letterSpacing: "-0.01em", color: "var(--text)" }}>{title}</div>
+        <div style={{ fontSize: "11.5px", color: "var(--text-muted)", marginTop: "3px", maxWidth: "640px" }}>{desc}</div>
       </div>
     </div>
   );
@@ -250,7 +262,7 @@ function TechDetails({ stats }) {
     <div>
       <button onClick={() => setOpen(v => !v)} style={{
         background: "none", border: "none", padding: "4px 0",
-        fontSize: "10px", color: "var(--paper-faint)",
+        fontSize: "10px", color: "var(--text-faint)",
         letterSpacing: ".1em", textTransform: "uppercase", fontWeight: "500",
       }}>
         {open ? "▾" : "▸"} Technical details
@@ -262,15 +274,15 @@ function TechDetails({ stats }) {
             ["Protocol",    "x402 nanopayments"],
             ["Collateral",  "USDC / USYC"],
             ["Registry",    "ArcIDRegistryV2 + DCAP"],
-            ["Adjudicator", "Claude Sonnet 4.6", "var(--seal)"],
+            ["Adjudicator", "Claude Sonnet 4.6", "var(--accent)"],
             ["Consumer",    stats?.consumer ?? "0x8F43C6a0..."],
           ].map(([k, v, accent]) => (
             <div key={k} style={{
               display: "flex", justifyContent: "space-between",
               padding: "5px 0", borderBottom: "1px solid var(--hairline)", fontSize: "10px",
             }}>
-              <span style={{ color: "var(--paper-faint)" }}>{k}</span>
-              <span className="mono" style={{ color: accent || "var(--paper-muted)", fontSize: "9px", maxWidth: "180px", textAlign: "right" }}>{v}</span>
+              <span style={{ color: "var(--text-faint)" }}>{k}</span>
+              <span className="mono" style={{ color: accent || "var(--text-muted)", fontSize: "9px", maxWidth: "180px", textAlign: "right" }}>{v}</span>
             </div>
           ))}
         </div>
