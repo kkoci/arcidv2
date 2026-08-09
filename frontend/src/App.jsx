@@ -30,14 +30,13 @@ export default function App() {
   const oracleRef  = useRef(null);
   const exploitRef = useRef(null);
 
+  // Kept on the fixed 5s interval — both are always fast (in-memory on the
+  // oracle process, no RPC round-trip).
   async function poll() {
     try {
-      const [sRes, vRes, cRes] = await Promise.all([
-        fetch("/api/stats"), fetch("/api/verdicts"), fetch("/api/chain-stats"),
-      ]);
+      const [sRes, vRes] = await Promise.all([fetch("/api/stats"), fetch("/api/verdicts")]);
       if (sRes.ok) setStats(await sRes.json());
       if (vRes.ok) setVerdicts((await vRes.json()).verdicts ?? []);
-      if (cRes.ok) setChainStats(await cRes.json());
       setLive(true);
     } catch { setLive(false); }
     finally { setLoading(false); setLastPoll(new Date()); }
@@ -47,6 +46,30 @@ export default function App() {
     poll();
     timerRef.current = setInterval(poll, POLL_MS);
     return () => clearInterval(timerRef.current);
+  }, []);
+
+  // Chain-stats polled on its own self-rescheduling loop, separate from the
+  // fixed interval above. Its first call can be a slow historical on-chain
+  // log scan (see oracle/src/chain.js — rate-limited RPC, chunked
+  // eth_getLogs) that can take far longer than POLL_MS; a fixed setInterval
+  // would fire a new overlapping request every 5s on top of the one still
+  // pending. This waits for each fetch to settle before scheduling the
+  // next, so it never piles up, and it no longer blocks stats/verdicts from
+  // showing up while it's still working through a slow first scan.
+  useEffect(() => {
+    let cancelled = false;
+    let timeoutId;
+
+    async function pollChainStats() {
+      try {
+        const r = await fetch("/api/chain-stats");
+        if (!cancelled && r.ok) setChainStats(await r.json());
+      } catch { /* keep retrying on the next tick */ }
+      if (!cancelled) timeoutId = setTimeout(pollChainStats, POLL_MS);
+    }
+
+    pollChainStats();
+    return () => { cancelled = true; clearTimeout(timeoutId); };
   }, []);
 
   const sorted     = [...verdicts].reverse();
@@ -110,12 +133,12 @@ export default function App() {
             fontSize: "clamp(30px, 4.2vw, 48px)", fontWeight: "700", letterSpacing: "-0.015em",
             lineHeight: "1.12", color: "var(--paper)", marginBottom: "18px",
           }}>
-            Agents make claims.<br />
-            <span style={{ color: "var(--seal)" }}>ArcID makes them put capital behind them.</span>
+            Machine-to-machine payments happen too fast to review by hand.<br />
+            <span style={{ color: "var(--seal)" }}>ArcID bonds collateral and settles automatically.</span>
           </h1>
           <p style={{ fontSize: "15px", color: "var(--paper-muted)", lineHeight: "1.7", maxWidth: "560px", margin: "0 auto" }}>
-            Hardware-attested identity, bonded USDC collateral, and deterministic verification —
-            settled automatically on-chain, with no human in the loop.
+            Real USDC collateral behind hardware-attested identity, paid over x402 nanopayments —
+            deterministic checks where possible, an AI adjudicator only where judgment is genuinely required.
           </p>
         </div>
 

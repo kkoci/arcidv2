@@ -86,9 +86,9 @@ export default function AgentCard({ stats, chainStats, onCycleComplete }) {
         {/* Stats row */}
         <div style={{ display: "flex" }}>
           {[
-            ["Bond",    fmtUsdc(oracle?.amount),                    isSlashed ? "var(--breach)" : "var(--paper)", "USDC/USYC collateral this oracle currently has locked on-chain — what a confirmed breach would draw from."],
-            ["Calls",   stats?.totalCalls ?? 0,                     "var(--paper)",                               "Total paid /api/price requests served so far."],
-            ["Slashes", chainStats?.summary?.totalSlashes ?? 0,     (chainStats?.summary?.totalSlashes ?? 0) > 0 ? "var(--breach)" : "var(--paper)", "Times this oracle's bond has been automatically seized after a confirmed breach."],
+            ["Bond",          fmtUsdc(oracle?.amount),                    isSlashed ? "var(--breach)" : "var(--paper)", "USDC/USYC collateral this oracle currently has locked on-chain — what a confirmed breach would draw from."],
+            ["Calls",         stats?.totalCalls ?? 0,                     "var(--paper)",                               "Total paid /api/price requests served so far, this session."],
+            ["Slashes (all-time)", chainStats?.summary?.totalSlashes ?? 0, (chainStats?.summary?.totalSlashes ?? 0) > 0 ? "var(--breach)" : "var(--paper)", "Read directly from on-chain AgentSlashed events — every confirmed breach ever recorded against this bond contract, not just this session. The Adjudication Feed below only shows verdicts from the current oracle session, so these two counts are expected to differ."],
           ].map(([lbl, val, color, hint], i) => (
             <div key={lbl} title={hint} style={{
               flex: 1, padding: "11px 14px", cursor: "help",

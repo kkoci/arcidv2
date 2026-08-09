@@ -40,8 +40,12 @@ export default function VerdictHistory({ verdicts }) {
             Every verdict is on-chain · click any tx to verify
           </div>
         </div>
-        <span className="mono" style={{ fontSize: "11px", color: "var(--paper-faint)" }}>
-          {verdicts.length} total
+        <span
+          className="mono"
+          title="This feed only holds verdicts from the current oracle session — it resets on restart. The bond contract's real slash count (shown on the oracle card) is cumulative on-chain history and isn't expected to match this number."
+          style={{ fontSize: "11px", color: "var(--paper-faint)", cursor: "help", borderBottom: "1px dotted var(--paper-faint)" }}
+        >
+          {verdicts.length} this session
         </span>
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>

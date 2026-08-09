@@ -164,6 +164,15 @@ let chainStatsCache = null;
 let chainStatsCachedAt = 0;
 const CACHE_TTL_MS = 5_000;
 
+// Dedup guard: a cold-start scan over a large block range (see
+// paginatedLogs) can run far longer than CACHE_TTL_MS. Without this, every
+// caller that lands while a scan is still in flight (a 5s-polling frontend
+// left open across a page reload, two browser tabs, etc.) would see the
+// cache as empty and kick off its OWN full scan — each one competing for
+// the same rate-limited RPC budget and multiplying, not sharing, the work.
+// Concurrent callers now await the one scan already running instead.
+let chainStatsInFlight = null;
+
 async function getChainStats({ force = false } = {}) {
   if (!config.BOND_CONTRACT_ADDRESS || !config.REGISTRY_ADDRESS) return null;
 
@@ -172,6 +181,13 @@ async function getChainStats({ force = false } = {}) {
     return chainStatsCache;
   }
 
+  if (chainStatsInFlight) return chainStatsInFlight;
+
+  chainStatsInFlight = scanChainStats(now).finally(() => { chainStatsInFlight = null; });
+  return chainStatsInFlight;
+}
+
+async function scanChainStats(now) {
   const provider = getProvider();
   const bond     = getBondContract(provider);
   const registry = getRegistryContract(provider);
