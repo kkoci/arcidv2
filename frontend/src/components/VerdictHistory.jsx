@@ -26,8 +26,8 @@ function splitReason(reason) {
   return { lead: reason.slice(0, boundary).trim(), body: reason.slice(boundary).trim() || null };
 }
 
-export default function VerdictHistory({ verdicts }) {
-  if (!verdicts.length) return <EmptyState />;
+export default function VerdictHistory({ verdicts, chainStats, onPointAtTrigger }) {
+  if (!verdicts.length) return <EmptyState chainStats={chainStats} onPointAtTrigger={onPointAtTrigger} />;
 
   return (
     <div>
@@ -55,22 +55,56 @@ export default function VerdictHistory({ verdicts }) {
   );
 }
 
-function EmptyState() {
+function EmptyState({ chainStats, onPointAtTrigger }) {
+  const totalSlashes  = chainStats?.summary?.totalSlashes ?? null;
+  const throughputRaw = chainStats?.summary?.cumulativeThroughputUsdc;
+  const hasHistory    = totalSlashes != null && totalSlashes > 0;
+  const throughputDisplay = throughputRaw != null ? `$${(Number(throughputRaw) / 1e6).toFixed(2)}` : null;
+
   return (
     <div className="g" style={{
       display: "flex", flexDirection: "column", alignItems: "center",
-      justifyContent: "center", padding: "72px 40px", textAlign: "center",
+      justifyContent: "center", padding: "52px 40px", textAlign: "center",
       minHeight: "360px",
     }}>
-      <SealMark state="sealed" size={48} />
-      <div className="display" style={{ fontSize: "19px", fontWeight: "600", letterSpacing: "-0.01em", marginTop: "18px", marginBottom: "10px", color: "var(--text)" }}>
-        Nothing has broken the seal yet
+      <SealMark state="sealed" size={52} />
+      <div className="display" style={{ fontSize: "20px", fontWeight: "700", letterSpacing: "-0.01em", marginTop: "16px", marginBottom: "8px", color: "var(--text)" }}>
+        No breaches yet this session
       </div>
-      <div style={{ fontSize: "13px", color: "var(--text-muted)", lineHeight: "1.9", maxWidth: "300px" }}>
-        Pick a fault mode, then hit{" "}
-        <span style={{ color: "var(--breach)", fontWeight: "600" }}>Oracle cheated. Break the seal.</span>
-        <br />Claude reads the evidence. On-chain in seconds.
+      <div style={{ fontSize: "13px", color: "var(--text-muted)", lineHeight: "1.8", maxWidth: "340px", marginBottom: "24px" }}>
+        This feed resets whenever the oracle restarts — the bond contract's real history doesn't.
       </div>
+
+      {/* Real on-chain history, not a placeholder — this is what "the bond
+          contract has actually done" looks like, independent of whatever
+          this browser session has or hasn't triggered yet. */}
+      {hasHistory && (
+        <div style={{ display: "flex", marginBottom: "26px" }}>
+          <div style={{ padding: "0 22px", textAlign: "center" }}>
+            <div className="mono" style={{ fontSize: "24px", fontWeight: "700", color: "var(--breach)" }}>{totalSlashes}</div>
+            <div style={{ fontSize: "9px", color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: ".08em", marginTop: "3px" }}>breaches, all-time</div>
+          </div>
+          {throughputDisplay && (
+            <div style={{ padding: "0 22px", borderLeft: "1px solid var(--hairline)", textAlign: "center" }}>
+              <div className="mono" style={{ fontSize: "24px", fontWeight: "700", color: "var(--accent)" }}>{throughputDisplay}</div>
+              <div style={{ fontSize: "9px", color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: ".08em", marginTop: "3px" }}>moved on-chain</div>
+            </div>
+          )}
+        </div>
+      )}
+
+      <button
+        onClick={onPointAtTrigger}
+        title="Scrolls to and highlights the real trigger button on the oracle card — this doesn't fire the cycle itself, that stays a deliberate single action over there."
+        style={{
+          background: "var(--breach)", color: "#fff",
+          padding: "12px 24px", fontSize: "13px", fontWeight: "700",
+          borderRadius: "10px", letterSpacing: "-.01em",
+          boxShadow: "var(--shadow-sm)",
+        }}
+      >
+        Trigger a live breach →
+      </button>
     </div>
   );
 }

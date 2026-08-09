@@ -13,7 +13,7 @@ const fmt     = a => a ? `${a.slice(0,6)}…${a.slice(-4)}` : "—";
 const fmtUsdc = r => r != null ? `$${(Number(r)/1e6).toFixed(2)}` : "—";
 const agentSt = a => a.active ? "active" : a.slashed ? "slashed" : "no bond";
 
-export default function AgentCard({ stats, chainStats, onCycleComplete }) {
+export default function AgentCard({ stats, chainStats, onCycleComplete, triggerRef }) {
   const [activeFault, setFault]      = useState(null);
   const [busy,        setBusy]       = useState(false);
   const [msg,         setMsg]        = useState("");
@@ -134,6 +134,7 @@ export default function AgentCard({ stats, chainStats, onCycleComplete }) {
         {/* CTA */}
         <div style={{ padding: "13px 15px", borderTop: "1px solid var(--hairline)" }}>
           <button
+            ref={triggerRef}
             onClick={trigger} disabled={triggering}
             title="Runs one full fault → verify → break-the-seal cycle end to end against the live contract, so you don't have to wait for the timer loop."
             style={{

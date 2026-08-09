@@ -1,11 +1,22 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+/* min-width: 0 here is the actual fix for horizontal overflow, not the
+   overflow-x:hidden backstop further down (that one only hides the
+   symptom — it clips oversized content rather than letting it shrink).
+   Flex/grid ITEMS default to min-width:auto, which refuses to shrink
+   below their content's natural (unwrapped) size — one long mono string
+   (a tx hash, an address, a raw error dump) anywhere inside a grid track
+   was enough to hold the whole column at ~630px on a 375px viewport.
+   Resetting min-width to 0 (harmless for every non-flex/grid element,
+   since 0 is already their default) lets items actually shrink to their
+   container and defers wrapping to overflow-wrap instead. */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; min-width: 0; }
 
 @keyframes pulse    { 0%,100%{opacity:1}50%{opacity:.35} }
 @keyframes slideIn  { from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)} }
 @keyframes crack    { 0%{stroke-dashoffset:24}100%{stroke-dashoffset:0} }
 @keyframes flashBreach { 0%,100%{box-shadow:0 0 0 0 rgba(229,72,77,0)}50%{box-shadow:0 0 36px 6px rgba(229,72,77,.28)} }
+@keyframes ctaPulse    { 0%{box-shadow:0 0 0 0 rgba(91,91,240,.45)}70%{box-shadow:0 0 0 14px rgba(91,91,240,0)}100%{box-shadow:0 0 0 0 rgba(91,91,240,0)} }
 
 :root {
   /* Light, modern-SaaS palette — Stripe/Linear/Mercury territory. One hero
@@ -40,6 +51,11 @@
 
 html { scroll-behavior: smooth; }
 
+/* Hard backstop against horizontal scroll — belt-and-suspenders alongside
+   the overflow-wrap rule below, which fixes the actual root cause (long
+   unbroken strings like raw error dumps or tx hashes forcing width). */
+html, body { overflow-x: hidden; max-width: 100%; }
+
 body {
   background-color: var(--bg);
   color: var(--text);
@@ -48,6 +64,7 @@ body {
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
   min-height: 100vh;
+  overflow-wrap: break-word;
 }
 
 #root { position: relative; z-index: 1; }
@@ -77,6 +94,7 @@ a { color: inherit; }
 .mono { font-family: 'IBM Plex Mono', monospace; }
 
 .slide-in { animation: slideIn .35s ease both; }
+.cta-pulse { animation: ctaPulse 1.6s ease-out; }
 
 /* Glossary hint — dotted underline signals "hover for explanation" on jargon
    (bond, slash, SLA, etc.) without needing a JS tooltip library. */
@@ -87,3 +105,52 @@ a { color: inherit; }
   position: absolute; inset: 0; z-index: -1; pointer-events: none;
   background: radial-gradient(60% 50% at 50% 0%, rgba(91,91,240,0.08), transparent 70%);
 }
+
+/* ── Layout system — both app sections share these, so they stay aligned ── */
+
+/* Consistent section side-padding, shrinks on mobile. Split from
+   top/bottom padding (which varies per section and stays inline) so this
+   one declaration controls left/right everywhere. */
+.px-section { padding-left: 28px; padding-right: 28px; }
+@media (max-width: 640px) { .px-section { padding-left: 16px; padding-right: 16px; } }
+
+/* The one shared max-width both app sections' content sits inside — this
+   is what makes them align edge-to-edge as you scroll instead of one
+   being full-width and the other a narrow centered strip. */
+.section-container { max-width: 1400px; margin: 0 auto; width: 100%; }
+
+/* SLA top row: Adjudication Feed | Price Oracle panel. Collapses to a
+   single stacked column on tablet and below — the oracle panel goes
+   full-width under the feed rather than being squeezed beside it. */
+.sla-top-grid { display: grid; grid-template-columns: 1fr 370px; gap: 16px; align-items: start; }
+@media (max-width: 900px) { .sla-top-grid { grid-template-columns: 1fr; } }
+
+/* Supporting cards (Grant Metrics / Gateway / USYC) — their own balanced
+   row below the top row, not stacked endlessly in a side column. */
+.supporting-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 16px; }
+@media (max-width: 900px) { .supporting-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 560px) { .supporting-grid { grid-template-columns: 1fr; } }
+
+/* Exploit section's two "already proven" result cards. */
+.proof-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+@media (max-width: 700px) { .proof-grid { grid-template-columns: 1fr; } }
+
+/* The interactive "try it" card's internal split (description | form) —
+   keeps it genuinely full-width (matching .proof-grid's row above, not
+   narrower) while using that width productively instead of stretching a
+   single form column edge to edge. */
+.tryit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: start; }
+@media (max-width: 700px) { .tryit-grid { grid-template-columns: 1fr; } }
+
+/* Hero mechanism steps — 4-across desktop, 2x2 tablet, 1-column phone. */
+.mechanism-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; max-width: 900px; margin: 44px auto 0; }
+@media (max-width: 900px) { .mechanism-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 560px) { .mechanism-grid { grid-template-columns: 1fr; } }
+
+/* Header secondary jump-links — hide rather than overflow on mobile;
+   brand/badge/live-status stay visible regardless. */
+.header-jumplinks { display: flex; gap: 8px; }
+@media (max-width: 640px) { .header-jumplinks { display: none; } }
+
+/* Hero live-counter row — wraps instead of forcing horizontal overflow. */
+.stat-row { display: flex; justify-content: center; flex-wrap: wrap; row-gap: 12px; }
