@@ -4,7 +4,9 @@
 
 Concretely: agents post a bond to register with ArcID. A consumer agent *reasons* — using Claude — whether the provider delivered. On a confirmed breach, the bond slashes automatically and pays the consumer. **Reputation is capital at risk, not a score.**
 
-Addresses bonded agent reputation and agent-to-agent nanopayment networks. Arc's own agent-identity standard, **ERC-8004**, explicitly excludes bonds and slashing from its scope ("incentives and slashing... are outside the scope of this registry") — arcid2 is the module that fills exactly that gap, writing real slash/settlement outcomes back into ERC-8004's ReputationRegistry rather than competing with or replacing it.
+There are now two working verticals on this one mechanism: a **Data SLA Bond** (an oracle sells price data; breach verification needs an LLM's judgment) and a **Proof-of-Exploit Bounty** (a bug-bounty payout decided by literally running the attack — deterministic, no LLM anywhere in the payout path). See the [Proof-of-Exploit section](#proof-of-exploit--a-second-vertical-on-the-same-primitive) below.
+
+Addresses bonded agent reputation and agent-to-agent nanopayment networks. Arc's own agent-identity standard, **ERC-8004**, explicitly excludes bonds and slashing from its scope ("incentives and slashing... are outside the scope of this registry") — arcid2 is an early working implementation of the stake-secured validator pattern ERC-8004 already anticipates, writing real slash/settlement outcomes back into ERC-8004's ReputationRegistry rather than competing with or replacing it.
 
 > **Transparency note:** the submission form locked 2026-07-06. Payment
 > execution on a clean verdict (real Circle Gateway settlement +
@@ -172,7 +174,7 @@ cd frontend && npm run dev            # ProofOfExploitCard talks to it directly
 
 ## The Moat
 
-Three properties stacked. No competitor, including AOZ, has all three:
+Three properties stacked. As of 2026-08-09, no found competitor combines all three:
 
 | Property | What it means |
 |----------|---------------|
@@ -180,7 +182,16 @@ Three properties stacked. No competitor, including AOZ, has all three:
 | **USYC yield-bearing collateral** | Bond collateral is USYC — Hashnote's tokenized T-bill fund on Arc. It earns ~4.9% APY while staked. Capital at risk that isn't idle capital. |
 | **LLM-reasoned adjudication** | The consumer agent reasons about *why* a failure is a breach vs a blip, and writes a rationale that goes on-chain in the `AgentSlashed` event. Not a cron job. |
 
-> AOZ has "bond + slash." ArcID has **TEE-gated identity + USYC yield + written LLM rationale on-chain.**
+**Named comparison, scoped honestly:** AOZ (`aoz.ag`) is the closest
+"agent posts collateral, gets slashed" pattern found in the same general
+space — but it's a **different chain (Solana) with different collateral
+(slashable AXN-denominated bonds)**, not a same-turf Arc/Circle
+competitor. It's a useful reference point for the pattern, not a
+head-to-head rival on this stack. Stated as of the date above, not a
+permanent claim — this space moves fast and a fuller search wasn't
+exhaustive.
+
+> AOZ's pattern is "bond + slash," on Solana with AXN collateral. ArcID's is **TEE-gated identity + USYC yield + written LLM rationale on-chain, on Arc with Circle infrastructure.**
 
 ---
 
@@ -335,7 +346,7 @@ cd frontend && npm install && npm run dev      # http://localhost:5174
 Consumer detects breach within ~12s, Claude writes the rationale, slash fires.
 
 ```bash
-# Contracts (50 tests, no external RPC)
+# Contracts (209 tests as of 2026-08-09, no external RPC — see "Phase Status" for the current count)
 npm test
 npm run deploy:standalone:local   # deploy DCAPVerifier + ArcIDRegistryV2 + ArcIDBond,
                                   # generate DCAP quote, register + bond in one command
@@ -458,7 +469,7 @@ formula `slash()` itself uses — so the on-chain result is never a surprise.
 
 ```
 → Slashing agent 0x71bE...abc on arcTestnet
-  ArcIDBond:    0x5E5e...4691d
+  ArcIDBond:    0xBEBD...86b3f
   Caller:       0xA662...0085
   Consumer:     0xF3a9...12c
   BreachClass:  hard (1)
@@ -753,7 +764,7 @@ The Circle-specific moat: **`ArcIDBond.sol` already supports any ERC-20** — th
 | `scripts/mint_usyc.js` | Mint USYC from USDC via Teller on Arc testnet |
 | `frontend/src/components/USYCBondCard.jsx` | Purple "yield-bearing" card with narrative + deployed contract address |
 
-**Test suite highlights (`npm test` — 104 passing total):**
+**Test suite highlights (104 passing total as of this Phase 5 build — see "Phase Status" above for the current, larger total):**
 
 ```
 USYC bond face value is $5.00 USDC at deposit time (sharePrice = $1.00)
@@ -794,6 +805,12 @@ npm run deploy:usyc:arc
 
 ### Frontend dashboard (`frontend/`)
 
+> **Superseded by the unified layout (post-submission — see [CHANGELOG.md](CHANGELOG.md)):**
+> the "five-panel traction strip" design described below is the original
+> Phase 4 build and no longer matches what's actually running. Kept as-is
+> per this doc's transparency principle of not rewriting pre-deadline
+> history — see the current layout described immediately after this note.
+
 A live React dashboard (Vite 5, port 5174) that visualises system health in real-time without any manual curl commands — the single-pane-of-glass for a hackathon demo.
 
 **Five-panel layout:**
@@ -806,15 +823,6 @@ A live React dashboard (Vite 5, port 5174) that visualises system health in real
 | **System info** | Chain, protocol, TEE gate, adjudicator, consumer wallet |
 | **Verdict feed** | Scrolling history of every Claude adjudication: badge (ok/breach/uncertain), three check marks, LLM rationale, payment amount, age |
 
-The dashboard polls `/api/stats` and `/api/verdicts` every 5 seconds and shows a live/disconnected indicator. All API calls are proxied through Vite to the oracle (no CORS in production build).
-
-**Start:**
-```bash
-cd frontend
-npm install
-npm run dev   # http://localhost:5174
-```
-
 **Oracle API extensions (added for Phase 4):**
 
 | Endpoint | Purpose |
@@ -825,7 +833,38 @@ npm run dev   # http://localhost:5174
 | `POST /admin/fault` | Set fault mode (`stale` / `null` / `bad-sig`) |
 | `POST /admin/fault/reset` | Clear fault mode |
 
-Consumer agent now sends `consumer` address in every verdict POST so the dashboard can surface it.
+### Current frontend — unified single-page layout (post-submission)
+
+Same dashboard, one continuous scrolling page instead of a tab-switcher
+between products — the "protocol first, two applications" restructure.
+Header, hero, then both verticals stacked underneath as proof points of the
+same mechanism rather than competing tabs.
+
+| Section | What it shows |
+|---------|----------------|
+| **Header** | Brand + `TESTNET` badge, `01 · Data SLA` / `02 · Exploit Bounty` jump-nav buttons that smooth-scroll to each section, live/offline indicator |
+| **Hero** | The actual thesis, leading with mechanism not "agents": *"Machine-to-machine payments happen too fast to review by hand. ArcID bonds collateral and settles automatically."* Below it, a 4-step mechanism flow (post collateral → TEE proves identity → outcome is verified → settled automatically) and the three live counters (bonded / under seal / slashed), read from real on-chain events |
+| **`01 · Data SLA Bond`** | `VerdictHistory` (adjudication feed) + a side stack: `AgentCard` (oracle identity, fault injection, the one-click "Oracle cheated. Break the seal." trigger), `GrantMetricsCard` (Tier-1 share, challenge rate, cumulative throughput), `GatewayPaymentCard` (live Circle Gateway pay-per-call demo), `USYCBondCard` |
+| **`02 · Exploit Bounty`** | A scope callout ("one registered exploit class, one demo contract — not a general-purpose auditor yet"), the "Already proven, on Arc testnet" feed showing the two real historical transactions below, and an interactive card wired to the real bounty harness (not a mock) — wallet input, "Run the real exploit" / "Or try it on a fixed version", live result with a real Arc testnet tx link |
+
+The top counters read from `/api/chain-stats` — a real historical on-chain
+event scan, polled on its own independent loop (separate from the fast
+`/api/stats` + `/api/verdicts` poll) specifically so a slow first-time scan
+can never block the rest of the page from showing data. `AgentSlashed` on
+the oracle card is deliberately labeled **all-time** (cumulative on-chain
+history since deployment) since it's expected to differ from the
+Adjudication Feed's session-scoped count, which resets whenever the oracle
+process restarts — both are correct, they just measure different things,
+and the UI says so on hover rather than leaving it to look like a bug.
+
+**Start:**
+```bash
+cd frontend
+npm install
+npm run dev   # http://localhost:5174
+```
+
+Consumer agent sends its `consumer` address in every verdict POST so the dashboard can surface it.
 
 ---
 
@@ -996,9 +1035,10 @@ admin        → setAuthorizedSlasher (owner only, emits SlasherUpdated)
 |----------|---------|
 | DCAPVerifier | `0xBB2835fC4d189340a98084A50DD0B36b4Ff50Ca2` |
 | ArcIDRegistryV2 | `0xf1ad81B9FcB805BB75f3c92B5Db67641B7C729C9` |
-| ArcIDBond (USDC collateral, current) | `0x5E5eA9513f96A537AE966840F3355ff80824691d` — post-submission redeploy for tiered-adjudication Phase 4 (proportional slashing); see [CHANGELOG.md](CHANGELOG.md) |
+| ArcIDBond (USDC collateral, current) | `0xBEBD8a19C1BE2802829c1fc50066348EBBD86b3f` — confirmed as of 2026-08-09 as the contract actually in live use: matches both `oracle/.env` and `consumer/.env`'s `BOND_CONTRACT_ADDRESS`, and directly verified this session via a real `slash()` transaction against it (`0xdc85016d2b010f9b148aea69ff38097a44938fa587ccd052d735cbea89c9de48`). Deployed by `scripts/deploy_bond_v2.js`, pointed at the existing `ArcIDRegistryV2` — see `deployments/arcTestnet_bond_v2.json`. |
+| ArcIDBond (USDC collateral, superseded) | `0x5E5eA9513f96A537AE966840F3355ff80824691d` — an earlier tiered-adjudication Phase 4 redeploy; this README previously (incorrectly) listed it as current. Corrected 2026-08-09 after checking `oracle/.env`/`consumer/.env` and confirming a real transaction against the address above instead. |
 | ArcIDBond (USDC collateral, original/pre-tiering) | `0xE4860b98AFace0166dD323D0E0b12e680d61D59c` — superseded, kept here for reference; the real historical slash tx in "Live Proof" above happened on this address |
-| ArcIDBond (USYC collateral) | _(run `npm run deploy:usyc:arc`)_ |
+| ArcIDBond (USYC collateral) | **Not yet deployed to Arc testnet** — confirmed absent from `deployments/` and `oracle/.env`'s `USYC_BOND_ADDRESS` as of 2026-08-09, pending the Circle USYC allowlist. Fully built and tested (13 passing tests, `test/ArcIDBondUSYC.test.js`) — the contract code path is real, this specific deployment isn't live yet. Deploy with `npm run deploy:usyc:arc`. |
 | USDC (Arc testnet) | `0x3600000000000000000000000000000000000000` |
 | USYC token | `0xe9185F0c5F296Ed1797AaE4238D26CCaBEadb86C` |
 | USYC Teller (mint/redeem) | `0x9fdF14c5B14173D74C08Af27AebFf39240dC105A` |
@@ -1007,21 +1047,25 @@ admin        → setAuthorizedSlasher (owner only, emits SlasherUpdated)
 | VulnerableVault, target 1 (confirmed exploit, claimed) | `0x53Cc93a28C839EEA98FF87abF4c7994EAe81dA6a` |
 | VulnerableVault, target 2 (negative control, unclaimed) | `0xfeBe8b00fb6d8e7eB63E9b62340e42f407A4b4A8` |
 
-**Registered & bonded agents on the current ArcIDBond (`0x5E5eA9...`), as of
-2026-07-30 — ⚠ not the same live state as the pre-tiering table this
-replaces:**
+**Registered & bonded agents on the current ArcIDBond (`0xBEBD8a19...`),
+live-read via `/api/chain-stats` on 2026-08-09 — real numbers, not
+carried forward from an earlier session:**
 
-| Address | Registered | Bonded | Status |
+| Address | Registered | Bonded | Amount |
 |---------|------------|--------|--------|
-| `0xA6622e7E77ed0f63FeA527273418C267C1c70085` (agent #1, rotated) | ✓ | **Pending** — re-bond blocked by an Arc testnet RPC write-rate-limit; owner + authorizedSlasher already point here, confirmed independently on-chain | Also `authorizedSlasher` and contract `owner` |
-| `0xe2F7a0E6d9865C7Dc9B5D19DCc11CBcb4655c661` (oracle wallet) | ✓ (on the original registry, carries over) | **Not yet bonded on this contract** — never was; surfaced during Phase 5 live verification | — |
-| `0xEF5adE59183CAd6A2dDC896BE7f8bE58eDf5f993` (agent #2) | ✓ (on the original registry, carries over) | **Not yet re-bonded on this contract** | — |
+| `0xe2F7a0E6d9865C7Dc9B5D19DCc11CBcb4655c661` (oracle wallet) | ✓ | ✓ Active | 3.608550 USDC |
+| `0xA6622e7E77ed0f63FeA527273418C267C1c70085` (consumer wallet — also `authorizedSlasher`) | ✓ | ✓ Active | 5.000000 USDC |
+| `0x8F43C6a0062D33585d97A54d7f380bc6D52B5440` (original deployer/agent #1) | ✓ | Not bonded on this contract | — |
+| `0xEF5adE59183CAd6A2dDC896BE7f8bE58eDf5f993` (agent #2) | ✓ | Not bonded on this contract | — |
+| `0x95C80031Ec9831cD5A830AF61616CC68e6B9d671` (ExploitBounty verifier — separate vertical) | ✓ | Not bonded on this contract | — |
 
-The original (pre-tiering) contract's historical state — including the real
-slash documented in "Live Proof" above — is unaffected and remains exactly
-as it was; this table describes the *new* contract's state, which starts
-from zero bonds by design (fresh deployment, no migration — see
-[CHANGELOG.md](CHANGELOG.md)).
+**Cumulative on-chain summary, same live read:** 2 active bonds ·
+8.608550 USDC TVL · 4 slashes (all-time) · 1 settlement · 3 indictments ·
+2 disputes resolved (~43% challenge rate) · 1.392450 USDC cumulative
+throughput (1.391450 slashed + 0.001000 settled). This is the same
+`totalSlashes` figure the frontend's "Slashes (all-time)" stat reads —
+it's cumulative history and not expected to match the Adjudication Feed's
+session-scoped count (see the frontend section above).
 
 ---
 
@@ -1204,7 +1248,7 @@ model this contract does not cover.
 | **Agentic reasoning** | Consumer agent uses Claude `tool_use` with forced structured output to reason about *why* a failure is a breach vs a transport blip. Three fault modes give genuinely different reasoning paths. Written rationale logged on-chain. `uncertain` verdict on ambiguous failures demonstrates restraint — the agent knows when not to slash. |
 | **Traction** | DCAP-verified agents registered on-chain via `ArcIDRegistryV2`; real x402 nanopayment volume on Arc testnet; outside participants recruited. Every cycle is logged to JSONL — traction is auditable, not claimed. |
 | **Circle tool usage** | **x402 Gateway:** oracle charges $0.001/call, consumer pays autonomously. **USYC collateral:** bond deployed with Hashnote's yield-bearing token; Teller integration for USDC→USYC mint. Both used together. |
-| **Innovation** | First system where TEE-attested identity gates the bond *before* stake (not stake as identity), and where bond collateral earns T-bill yield while at risk. No adjacent project has both properties. |
+| **Innovation** | TEE-attested identity gates the bond *before* stake (not stake as identity), and bond collateral earns T-bill yield while at risk. As of 2026-08-09, no found adjacent project combines both properties — see "The Moat" above for the specific comparison this rests on. |
 
 ---
 
@@ -1278,5 +1322,5 @@ curl https://<cvm-hash>-3001.dstack-pha-prod5.phala.network/api/attest | jq .rea
 
 ## Links
 
-- Live frontend: [frontend-five-eta-43.vercel.app](https://frontend-five-eta-43.vercel.app)
+- Live frontend: [frontend-five-eta-43.vercel.app](https://frontend-five-eta-43.vercel.app) — page loads (re-verified 2026-08-09). Backend (Phala CVM) is being redeployed ahead of final submission and may show as offline if checked before then — everything described in this README, including both the Proof-of-Exploit and Data SLA verticals, has been fully tested locally and on Arc testnet (see the real transaction hashes throughout this doc). Live dashboard will be running for Demo Day. Run it locally in the meantime (see `RUNBOOK.md`) for a fully working demo.
 - Arc testnet explorer: [testnet.arcscan.app](https://testnet.arcscan.app)
