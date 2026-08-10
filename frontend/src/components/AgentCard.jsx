@@ -19,6 +19,7 @@ export default function AgentCard({ stats, chainStats, onCycleComplete, triggerR
   const [msg,         setMsg]        = useState("");
   const [result,      setResult]     = useState(null);
   const [triggering,  setTriggering] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   const agents      = chainStats?.agents ?? [];
   const oracle      = agents.find(a => a.address.toLowerCase() === ORACLE_ADDR);
@@ -44,6 +45,11 @@ export default function AgentCard({ stats, chainStats, onCycleComplete, triggerR
     finally { setBusy(false); }
   }
 
+  // Synchronous, one-shot, no background loop required: this single request
+  // forces the fault, checks it, and slashes on-chain, all server-side,
+  // returning the result (including a real tx hash) in this same response.
+  // Same underlying mechanism the CLI's `npm run demo:hard-breach` (in
+  // consumer/) uses independently — two callers, one real trigger each.
   async function trigger() {
     setTriggering(true); setResult(null); setMsg("");
     try {
@@ -100,43 +106,14 @@ export default function AgentCard({ stats, chainStats, onCycleComplete, triggerR
           ))}
         </div>
 
-        {/* Fault injection */}
-        <div style={{ padding: "11px 15px", borderTop: "1px solid var(--hairline)" }}>
-          <div className="hint" style={{ fontSize: "9px", color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: ".1em", fontWeight: "600", marginBottom: "7px", display: "inline-block" }}
-            title="Make the oracle misbehave on its next response, so you can watch the consumer agent catch it and break the seal in real time.">
-            Inject fault → Claude detects → seal breaks
-          </div>
-          <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
-            {FAULT_MODES.map(({ mode, hint }) => (
-              <button key={mode} title={hint} onClick={() => injectFault(mode)} disabled={busy} style={{
-                padding: "4px 11px", fontSize: "10px",
-                fontFamily: "'IBM Plex Mono', monospace", fontWeight: "600",
-                borderRadius: "6px",
-                background: activeFault === mode ? "var(--breach-soft)"      : "rgba(20,20,25,.04)",
-                color:      activeFault === mode ? "var(--breach)"           : "var(--text-muted)",
-                border:     `1px solid ${activeFault === mode ? "rgba(229,72,77,.4)" : "var(--hairline-hi)"}`,
-                transition: "all .15s",
-              }}>
-                {mode}
-              </button>
-            ))}
-            <button onClick={resetFault} disabled={busy || !activeFault} style={{
-              padding: "4px 10px", fontSize: "10px", borderRadius: "6px",
-              background: "rgba(20,20,25,.03)", color: "var(--text-faint)",
-              border: "1px solid var(--hairline)",
-            }}>
-              reset
-            </button>
-            {msg && <span className="mono" style={{ fontSize: "9px", color: "var(--text-muted)" }}>{msg}</span>}
-          </div>
-        </div>
-
-        {/* CTA */}
+        {/* PRIMARY CTA — the one obvious demo action. No fault-mode picker:
+            bad-sig is hardcoded server-side because it's deterministic and
+            needs no Anthropic key, so this always works the same way. */}
         <div style={{ padding: "13px 15px", borderTop: "1px solid var(--hairline)" }}>
           <button
             ref={triggerRef}
             onClick={trigger} disabled={triggering}
-            title="Runs one full fault → verify → break-the-seal cycle end to end against the live contract, so you don't have to wait for the timer loop."
+            title="Runs the entire fault → verify → slash cycle in one request, synchronously, against the live contract — no background process needs to be running."
             style={{
               width: "100%", padding: "13px 18px",
               fontSize: "13px", fontWeight: "700", letterSpacing: "-.01em",
@@ -148,12 +125,15 @@ export default function AgentCard({ stats, chainStats, onCycleComplete, triggerR
               transition: "all .2s",
             }}
           >
-            {triggering ? "Claude is adjudicating…" : "Oracle cheated. Break the seal. →"}
+            {triggering ? "Slashing on-chain…" : "Trigger a live slash →"}
           </button>
           {!triggering && (
             <div style={{ fontSize: "10px", color: "var(--text-faint)", textAlign: "center", marginTop: "7px" }}>
-              Claude decides · USDC moves on-chain · live
+              One click · real tx · a few seconds
             </div>
+          )}
+          {msg && !result && (
+            <div style={{ fontSize: "10px", color: "var(--breach)", textAlign: "center", marginTop: "6px" }}>{msg}</div>
           )}
           {result && (
             <div style={{
@@ -171,6 +151,50 @@ export default function AgentCard({ stats, chainStats, onCycleComplete, triggerR
                   {result.slashTx.slice(0,26)}… ↗
                 </a>
               )}
+            </div>
+          )}
+        </div>
+
+        {/* Advanced — manual per-mode fault injection, for the real timer
+            loop (consumer && npm start), NOT the primary demo path above.
+            Collapsed by default so it doesn't compete with the one-click
+            trigger for attention. */}
+        <div style={{ borderTop: "1px solid var(--hairline)" }}>
+          <button onClick={() => setAdvancedOpen(v => !v)} style={{
+            width: "100%", background: "none", border: "none", textAlign: "left",
+            padding: "9px 15px", fontSize: "9px", color: "var(--text-faint)",
+            letterSpacing: ".1em", textTransform: "uppercase", fontWeight: "600",
+          }}>
+            {advancedOpen ? "▾" : "▸"} Advanced — manual fault injection
+          </button>
+          {advancedOpen && (
+            <div style={{ padding: "0 15px 13px" }}>
+              <div className="hint" style={{ fontSize: "9px", color: "var(--text-faint)", marginBottom: "7px", display: "inline-block" }}
+                title="Sets a flag the oracle returns on its NEXT real /api/price call — for use with the actual consumer timer loop, not a one-shot trigger like the button above.">
+                Sets a fault flag for the next real oracle call (needs the consumer loop running)
+              </div>
+              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
+                {FAULT_MODES.map(({ mode, hint }) => (
+                  <button key={mode} title={hint} onClick={() => injectFault(mode)} disabled={busy} style={{
+                    padding: "4px 11px", fontSize: "10px",
+                    fontFamily: "'IBM Plex Mono', monospace", fontWeight: "600",
+                    borderRadius: "6px",
+                    background: activeFault === mode ? "var(--breach-soft)"      : "rgba(20,20,25,.04)",
+                    color:      activeFault === mode ? "var(--breach)"           : "var(--text-muted)",
+                    border:     `1px solid ${activeFault === mode ? "rgba(229,72,77,.4)" : "var(--hairline-hi)"}`,
+                    transition: "all .15s",
+                  }}>
+                    {mode}
+                  </button>
+                ))}
+                <button onClick={resetFault} disabled={busy || !activeFault} style={{
+                  padding: "4px 10px", fontSize: "10px", borderRadius: "6px",
+                  background: "rgba(20,20,25,.03)", color: "var(--text-faint)",
+                  border: "1px solid var(--hairline)",
+                }}>
+                  reset
+                </button>
+              </div>
             </div>
           )}
         </div>

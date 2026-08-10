@@ -48,8 +48,11 @@ export default function VerdictHistory({ verdicts, chainStats, onPointAtTrigger 
           {verdicts.length} this session
         </span>
       </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-        {verdicts.map((v, i) => <Card key={i} v={v} />)}
+      <div style={{ position: "relative" }}>
+        <div className="feed-scroll" style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+          {verdicts.map((v, i) => <Card key={i} v={v} />)}
+        </div>
+        {verdicts.length > 2 && <div className="feed-fade" />}
       </div>
     </div>
   );

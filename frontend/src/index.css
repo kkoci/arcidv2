@@ -154,3 +154,30 @@ a { color: inherit; }
 
 /* Hero live-counter row — wraps instead of forcing horizontal overflow. */
 .stat-row { display: flex; justify-content: center; flex-wrap: wrap; row-gap: 12px; }
+
+/* Adjudication Feed — capped height with its own scroll so the card list
+   doesn't grow unbounded and dwarf the oracle panel beside it. */
+.feed-scroll {
+  max-height: 640px;
+  overflow-y: auto;
+  padding-right: 4px; /* keeps the scrollbar from touching card edges */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(20,20,25,.16) transparent;
+}
+/* Without this, flex's default flex-shrink:1 lets card items compress to fit
+   inside max-height instead of overflowing it — the container never
+   actually overflows, so overflow-y:auto has nothing to scroll. */
+.feed-scroll > * { flex-shrink: 0; }
+.feed-scroll::-webkit-scrollbar { width: 6px; }
+.feed-scroll::-webkit-scrollbar-track { background: transparent; }
+.feed-scroll::-webkit-scrollbar-thumb { background: rgba(20,20,25,.16); border-radius: 3px; }
+.feed-scroll::-webkit-scrollbar-thumb:hover { background: rgba(20,20,25,.28); }
+@media (max-width: 900px) { .feed-scroll { max-height: 480px; } }
+
+/* Bottom fade cue — sits over the scroll container (sibling, not a child,
+   so it doesn't scroll away with the content), hinting more is below. */
+.feed-fade {
+  position: absolute; left: 0; right: 4px; bottom: 0; height: 36px;
+  background: linear-gradient(to bottom, rgba(250,249,249,0), var(--bg) 90%);
+  pointer-events: none;
+}

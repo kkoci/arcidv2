@@ -83,8 +83,20 @@ module.exports = {
   // Loop
   POLL_INTERVAL_MS: parseInt(process.env.POLL_INTERVAL_MS || "12000", 10), // 12s default
 
-  // DEV_MODE: skip real on-chain slash + use dev x402 payment
+  // DEV_MODE: use dev x402 payment protocol when fetching from the oracle
+  // (must match the oracle's own DEV_MODE — see oracle.js's module comment,
+  // the two payment protocols are mutually unintelligible) AND, by default,
+  // skip the real on-chain slash (slasher.js).
   DEV_MODE: process.env.DEV_MODE !== "false",
+
+  // FORCE_REAL_SLASH: decouples "which payment protocol to speak" from
+  // "should slash() actually hit the chain" — these were previously both
+  // gated by the single DEV_MODE flag, which is a real problem when the
+  // oracle needs DEV_MODE=true for an unrelated reason (its /admin/* auth
+  // gate — see CLAUDE.md) but the demo still wants a genuine on-chain
+  // slash, not a simulated one. Opt-in, default false (unchanged prior
+  // behavior for anyone not setting this).
+  FORCE_REAL_SLASH: process.env.FORCE_REAL_SLASH === "true",
 
   // Logging
   LOG_DIR: process.env.LOG_DIR || "logs",

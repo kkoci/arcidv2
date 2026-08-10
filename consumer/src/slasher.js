@@ -1,7 +1,13 @@
 /**
  * slasher.js — Calls ArcIDBond.slash() on-chain when the adjudicator returns a breach verdict.
  *
- * In DEV_MODE=true: logs the slash without sending an on-chain tx (no RPC needed locally).
+ * In DEV_MODE=true: logs the slash without sending an on-chain tx (no RPC needed locally) —
+ *                    UNLESS config.FORCE_REAL_SLASH is also set, which sends a real tx anyway.
+ *                    Exists because DEV_MODE also selects which x402 payment protocol
+ *                    oracle.js speaks (see that file's own comment) — the oracle sometimes
+ *                    needs DEV_MODE=true for an unrelated reason (its /admin/* auth gate),
+ *                    and FORCE_REAL_SLASH lets a demo still produce a genuine on-chain slash
+ *                    in that situation instead of a simulated one.
  * In production:    sends a real tx to Arc testnet.
  *
  * Phase 6 (post-submission — see CHANGELOG.md): when config.SESSION_GUARD_ADDRESS
@@ -99,7 +105,7 @@ async function executeSlash({ agentAddress, consumerAddress, reason, oracleRespo
   const { route, verdictHash, serviceId, previewAmount } = gateResult;
   const breachClass = breachClassFor(verdict);
 
-  if (config.DEV_MODE) {
+  if (config.DEV_MODE && !config.FORCE_REAL_SLASH) {
     const label = route === "dispute" ? "indictment (challenge window)" : "slash";
     console.log(`  [slash] DEV_MODE — simulated ${label}`);
     console.log(`  [slash] agent:    ${agentAddress}`);
