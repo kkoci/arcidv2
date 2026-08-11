@@ -1,12 +1,8 @@
 {
   "rewrites": [
     {
-      "source": "/api/:path*",
+      "source": "/api/:path((?!admin/).*)",
       "destination": "https://9c3a144f929db3e05d05bb03839a04527bda9841-3001.dstack-pha-prod5.phala.network/api/:path*"
-    },
-    {
-      "source": "/admin/:path*",
-      "destination": "https://9c3a144f929db3e05d05bb03839a04527bda9841-3001.dstack-pha-prod5.phala.network/admin/:path*"
     },
     {
       "source": "/health",

@@ -15,7 +15,7 @@ export default function GatewayPaymentCard() {
   async function pay() {
     setPaying(true); setError(""); setResult(null);
     try {
-      const r = await fetch("/admin/demo-pay", { method: "POST" });
+      const r = await fetch("/api/admin/demo-pay", { method: "POST" });
       const data = await r.json();
       if (!r.ok) { setError(data.error || "Payment failed"); return; }
       setResult(data);

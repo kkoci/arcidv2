@@ -28,7 +28,7 @@ export default function AgentCard({ stats, chainStats, onCycleComplete, triggerR
   async function injectFault(mode) {
     setBusy(true); setMsg("");
     try {
-      const r = await fetch("/admin/fault", { method: "POST",
+      const r = await fetch("/api/admin/fault", { method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mode }),
       });
@@ -40,7 +40,7 @@ export default function AgentCard({ stats, chainStats, onCycleComplete, triggerR
 
   async function resetFault() {
     setBusy(true);
-    try { await fetch("/admin/fault/reset", { method: "POST" }); setFault(null); setMsg(""); }
+    try { await fetch("/api/admin/fault-reset", { method: "POST" }); setFault(null); setMsg(""); }
     catch {}
     finally { setBusy(false); }
   }
@@ -53,7 +53,7 @@ export default function AgentCard({ stats, chainStats, onCycleComplete, triggerR
   async function trigger() {
     setTriggering(true); setResult(null); setMsg("");
     try {
-      const r = await fetch("/admin/trigger-cycle", { method: "POST",
+      const r = await fetch("/api/admin/trigger-cycle", { method: "POST",
         headers: { "Content-Type": "application/json" },
       });
       const data = await r.json();
