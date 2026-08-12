@@ -21,6 +21,9 @@ const ARTIST_REGISTRY_ABI = [
 const TRAINING_POOL_ABI = [
   "function pools(uint256 poolId) view returns (address company, bytes32 corpusRoot, uint256 amount, bool distributed, bool withdrawn)",
 ];
+const RIGHTS_CLAIM_BOND_ABI = [
+  "function isLicensable(bytes32 fingerprintHash) view returns (bool)",
+];
 
 const app = express();
 app.use(express.json({ limit: "2mb" })); // demo-scope corpora only — tens of tracks, not millions
@@ -76,11 +79,21 @@ app.post("/api/ingest", async (req, res) => {
       return res.status(404).json({ error: `poolId ${poolId} not found on-chain` });
     }
 
+    // Rights-Claim Bonding gate (post-submission — see CHANGELOG.md) —
+    // strictly opt-in via config, so the existing AcquisitionAgent demo
+    // catalog (never claim-bonded) keeps working unchanged by default.
+    let checkLicensable;
+    if (config.RIGHTS_CLAIM_BOND_ADDRESS) {
+      const rightsBond = new ethers.Contract(config.RIGHTS_CLAIM_BOND_ADDRESS, RIGHTS_CLAIM_BOND_ABI, provider);
+      checkLicensable = (fp) => rightsBond.isLicensable(fp);
+    }
+
     const result = await ingest({
       corpus,
       committedCorpusRoot: onChainPool.corpusRoot,
       poolAmount: onChainPool.amount,
       resolveArtist: (fp) => registry.artistOf(fp),
+      checkLicensable,
     });
 
     const signature = await signAllocation(poolId, result.allocationRoot);

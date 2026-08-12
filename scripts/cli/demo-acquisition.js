@@ -28,10 +28,9 @@ const {
   parseArgs, requireEnvKey, getProvider,
   loadTrainingCompensationDeployment, getTrainingCompensationContracts,
 } = require("./_lib");
-const { buildTree } = require("../../ingestor/src/merkle");
-const { corpusLeaf } = require("../../ingestor/src/allocator");
 const { selectTracks } = require("../../acquisition/src/agent");
 const { TRACKS } = require("../../acquisition/src/catalog");
+const { settleSelection } = require("../../acquisition/src/settle");
 
 const GAS_FUND = "0.01"; // native ETH per demo wallet
 
@@ -117,13 +116,10 @@ async function main() {
   }
 
   // ── 4. Hand off to the EXISTING, unmodified settlement machinery — the
-  //      agent's job ends here. Everything below is identical in kind to
-  //      demo-training-compensation.js, just fed the agent's selection
-  //      instead of a hardcoded corpus. ──
-  const selectedFps = result.selected.map((t) => fpByTrackId[t.id]);
-  const { root: corpusRoot } = buildTree(selectedFps.map(corpusLeaf));
+  //      agent's job ends here. settleSelection() is the exact same
+  //      function acquisition/server.js uses — one implementation, not
+  //      two copies. ──
   const poolAmount = BigInt(Math.round(result.totalCost * 1e6));
-
   if (isLocal) {
     const MockUSDC_ABI = ["function mint(address to, uint256 amount) returns (bool)"];
     const mockUsdc = new ethers.Contract(deploy.addresses.collateralToken, MockUSDC_ABI, deployer);
@@ -137,46 +133,25 @@ async function main() {
     await (await usdc.connect(deployer).transfer(company.address, poolAmount)).wait();
   }
 
-  const poolId = await pool.nextPoolId();
-  let companyNonce = await provider.getTransactionCount(company.address, "pending");
-  await (await usdc.connect(company).approve(deploy.addresses.TrainingPool, poolAmount, { nonce: companyNonce++ })).wait();
-  await (await pool.connect(company).createPool(corpusRoot, poolAmount, { nonce: companyNonce++ })).wait();
-  console.log(`\n✓ Pool #${poolId} created — $${result.totalCost.toFixed(2)} escrowed over the agent's own selection, corpusRoot ${corpusRoot}`);
+  const settled = await settleSelection({
+    selected: result.selected,
+    fpByTrackId,
+    pricePerTrack,
+    company,
+    ingestor,
+    artistWalletByKey: artistWallets,
+    usdc, pool, claimContract, ingestorUrl,
+    onStep: (event, data) => console.log(`  · ${event} ${JSON.stringify(data)}`),
+  });
 
-  console.log(`\n→ Calling ingestion enclave at ${ingestorUrl}/api/ingest ...`);
-  let ingestResp;
-  try {
-    const r = await fetch(`${ingestorUrl}/api/ingest`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ poolId: poolId.toString(), corpus: selectedFps }),
-    });
-    ingestResp = await r.json();
-    if (!r.ok) throw new Error(ingestResp.error || `HTTP ${r.status}`);
-  } catch (e) {
-    console.error(`\n✗ Ingestion call failed: ${e.message}\n  Is the ingestion enclave running? (cd ingestor && npm start)\n`);
-    process.exit(1);
-  }
-  console.log(`✓ Ingested — allocationRoot: ${ingestResp.allocationRoot}`);
-
-  const submitTx = await claimContract.connect(ingestor).submitAllocation(poolId, ingestResp.allocationRoot);
-  const submitReceipt = await submitTx.wait();
-  console.log(`✓ submitAllocation() mined → ${submitReceipt.hash}`);
-
-  const walletByAddress = {};
-  for (const key of artistKeys) walletByAddress[artistWallets[key].address.toLowerCase()] = { key, wallet: artistWallets[key] };
-
-  console.log(`\n→ Winning artists claiming their shares...`);
-  for (const a of ingestResp.allocations) {
-    const entry = walletByAddress[a.artist.toLowerCase()];
-    if (!entry) { console.log(`  (skipping unknown address ${a.artist})`); continue; }
-    const tx = await claimContract.connect(entry.wallet).claim(poolId, BigInt(a.amount), a.proof);
-    await tx.wait();
-    const bal = await usdc.balanceOf(entry.wallet.address);
-    console.log(`  ✓ artist ${entry.key} claimed — balance now $${(Number(bal) / 1e6).toFixed(2)}`);
-  }
+  console.log(`\n✓ Pool #${settled.poolId} created — $${settled.poolAmountUsdc.toFixed(2)} escrowed over the agent's own selection, corpusRoot ${settled.corpusRoot}`);
+  console.log(`✓ Ingested — allocationRoot: ${settled.allocationRoot}`);
+  console.log(`✓ submitAllocation() mined → ${settled.submitAllocationTx}`);
+  console.log(`\n→ Winning artists claimed:`);
+  for (const c of settled.claims) console.log(`  ✓ artist ${c.artistKey} claimed $${c.amountUsdc.toFixed(2)} — tx ${c.tx}`);
 
   console.log(`\n${"─".repeat(60)}`);
-  console.log(`Real judgment, real settlement — pool #${poolId}, $${result.totalCost.toFixed(2)} paid for tracks the agent actually chose.`);
+  console.log(`Real judgment, real settlement — pool #${settled.poolId}, $${settled.poolAmountUsdc.toFixed(2)} paid for tracks the agent actually chose.`);
   console.log(`${"─".repeat(60)}\n`);
 }
 

@@ -2346,6 +2346,20 @@ touched or redeployed.
 
 ---
 
+## Post-submission: Frontend — card, then full product pivot, then copy revision (2026-08-12)
+
+**Context.** Three sequential, explicitly-scoped frontend passes, same day, logged together since each built directly on the last and none is coherent read in isolation. This is the entry the AcquisitionAgent entry below already refers to as "the frontend pivot entry above this one" — written now, not at the time, closing that gap.
+
+**Pass 1 — Phase 8, the Training Compensation frontend card (optional per its own Phase 0 scope).** `frontend/src/components/TrainingCompensationCard.jsx` added as a new "03 · Training Compensation" section alongside the two existing verticals (Data SLA Bond, Proof-of-Exploit Bounty) — same design tokens/`SealMark`/card patterns, no new visual language. Real Phase 7 Arc testnet transactions shown unconditionally (no click required), same "proof without interaction" property `ProofOfExploitCard` already established. Screenshot-verified rendering correctly via a real headless-Chromium run (no project skill existed for this; installed Playwright, drove the real Vite dev server) — zero console errors, confirmed responsive at 375px.
+
+**Pass 2 — full product pivot, not an addition.** Explicit correction: Training Compensation was wrong as a third co-equal section — it IS the product now, not one of three. `AgentCard`, `VerdictHistory`, `GatewayPaymentCard`, `GrantMetricsCard`, `USYCBondCard`, `ProofOfExploitCard` removed from `App.jsx`'s render tree entirely (not hidden, not commented out) along with all oracle-stats polling — this page no longer talks to that backend at all. New hero copy, new mechanism steps (register → commit corpus → enclave verifies → claim, replacing the old bond/slash 4-step flow), new "Cyber-Organic Dark" palette end to end (`frontend/src/index.css` — Deep Obsidian `#090A0F` background, Electric Cyan `#00F5D4` + Sonic Violet `#7B2CBF` as the two accents, blended into a gradient on the hero headline and primary CTA). README's title and opening repositioned around Training Compensation as the lead product; the two earlier verticals reframed as "also proven on this protocol" evidence pointing at their existing sections, not deleted and not presented as co-equal. **Nothing deleted** — old contract/test/CLI files for both earlier verticals, and the now-unimported frontend components, all still exist and still work; only what `App.jsx` renders changed. Verified via the same real-browser method as Pass 1: screenshotted, programmatically grepped the rendered page's actual text to confirm the old headline/section names/nav were genuinely absent (not just visually deprioritized), zero console errors, no horizontal overflow at 390px.
+
+**Pass 3 — copy and visual-hierarchy revision, explicitly no architecture changes.** Hero headline/subhead replaced with direct product language ("License music for AI training. Pay artists automatically."). Mechanism steps reframed as a user journey (artists opt in → AI company funds the pool → usage verified privately → artists get paid) rather than a developer/contract-call list. "How it's enforced" renamed "Private verification. Public settlement." with a lead sentence stating the actual privacy claim before the existing scope note. The three-card proof-transaction grid redesigned around a real vertical money-flow visual (`$3.00 USDC pool → TEE verifies → per-artist amounts → ✓ Settled on Arc`) as the section's actual centerpiece, with the detailed transaction cards + CLI reproduction instructions demoted behind a closed-by-default "▸ Verify the transactions" disclosure — same collapsible pattern already used elsewhere in this repo, not a new interaction. Added a primary "For AI companies / For artists" two-sided pitch just below the hero (cyan/violet accent split, tying directly into the two-color palette), and one small, deliberately secondary "Why ArcID?" differentiation note lower on the page. Footer copy updated. Verified the same way: screenshotted before/after, confirmed every old and new string's presence/absence programmatically, zero console errors on both a 1400px and a 375px viewport, confirmed the Artist A/B pair in the money-flow visual correctly wraps to stacked rows rather than overflowing at mobile width.
+
+`npm test`: unaffected by any of the three passes — frontend-only, no contract or backend changes in this entry.
+
+---
+
 ## Post-submission: AcquisitionAgent — a real judgment layer for Training Compensation (2026-08-12)
 
 **Context.** Same post-form-lock, extended-event-window basis as every entry above, now further into the post-hackathon grant-application phase (see the frontend pivot entry above this one). The AI-company side of a training pool was, until this entry, a metadata filter wearing "agentic" as a label — this makes it a genuine agent making a judgment call under budget, an honest fit for Circle's "Agentic economic activity" framing rather than a query dressed up as one.
@@ -2372,3 +2386,75 @@ touched or redeployed.
 `npm test` run before and after: 282 passing, up from 270, zero regressions to the settlement layer.
 
 **Time estimate vs. actual:** scoped at ~2.5-3.5h before writing code (catalog+agent core ~1h, CLI wiring ~40min, tests ~30min, live verification ~30-40min including the deliberate three-brief run). Landed inside that range — no phase ran meaningfully longer than scoped, no design decision required backing out of an existing pattern.
+
+---
+
+## Post-submission: License Training Data — the real product surface, live (2026-08-12)
+
+**Context.** Same post-hackathon grant-application basis as the two entries above. Until this entry, the AcquisitionAgent's real judgment (previous entry) was only reachable via a CLI flag — not a usable interface for an actual customer. This makes it a real product surface: a form an AI company would actually use, wired to the exact same judgment + settlement code, no reimplementation.
+
+**Framing decision, deliberate:** no "test," "try," or "demo" language anywhere in this build's copy. The section is titled "License Training Data," the button reads "License matching tracks," and the only network disclosure is the same small "Arc testnet" badge every other section already uses — not a disclaimer implying the flow is fake.
+
+**What was added:**
+
+| Area | What |
+|---|---|
+| `acquisition/src/settle.js` | The settlement handoff (fund pool → real ingestion enclave → submit allocation → artist claims) extracted out of `demo-acquisition.js` into one shared function — the CLI and the new HTTP server both call this, not two copies. `scripts/cli/demo-acquisition.js` refactored to use it; re-verified live afterward to confirm the extraction changed nothing behaviorally. |
+| `scripts/setup_acquisition_catalog.js` | One-time, idempotent, persistent setup — unlike the CLI's fresh-wallets-every-run demo, the live endpoint needs a company + 3 artist wallets and a registered catalog that persists across requests. Reuses the **existing** `ArtistRegistry`/`TrainingPool`/`CompensationClaim` deployment (no redeploy). Stable `keccak256(trackId)` fingerprints (no per-run timestamp) so registration only ever happens once per track. |
+| `acquisition/server.js` | The live HTTP surface. `POST /api/acquire { brief, budget }` → `202 { jobId }`; `GET /api/acquire/:jobId` → poll for live progress. **Async job+poll, not a single synchronous request** — see the timing/decision note below. Per-IP rate limit (3 requests / 10 min, in-memory, same shape as `bounty/server.js`'s), since each hit costs real Claude API money and spends from a wallet with a finite USDC balance. |
+| `frontend/src/components/AcquisitionForm.jsx` | The real intake form — brief textarea, budget input, "License matching tracks" button, live-updating evaluation feed as each track's real Claude judgment lands, then a real settlement confirmation with real Arc testnet transaction links. Same design tokens/`SealMark`/card patterns as every other component, no new visual language. Added to the Training Compensation section in `App.jsx`, above the existing proof cards. |
+
+**Sync vs. async — decided from real measurement, not guessed:** timed an actual run against real Arc testnet during this build. Evaluation (6 real Claude calls) took ~16-20s; settlement (pool funding, ingestion, allocation submission, N artist claims — all real transactions on a public testnet RPC) took another ~25-35s. Total: **~45-51 seconds**, with real variance run to run. A single HTTP request held open that long is fragile (proxy/browser timeouts, zero partial-progress recovery if it drops mid-flight) and gives worse UX than the alternative: async job+poll lets the frontend show each track's real reasoning as it actually lands, which is also what the spec asked for directly. Chose async for both the reliability and the honesty of the resulting UI.
+
+**A real infrastructure issue found and fixed during live testing, not glossed over:** the first live run through the new endpoint failed with `INSUFFICIENT_FUNDS` — the ingestor wallet's gas balance (0.01 ETH, funded back in Phase 5) had been drawn down by repeated `submitAllocation()` calls across this session's testing and had too little left for one more. Topped up with a real funding tx (`0xb37a3736...`) and re-ran; second run succeeded end to end. Kept in the record because it's a genuine operational lesson (a live wallet needs a real balance-monitoring story eventually, not a one-time funding), not because it reflects a design flaw in the new code.
+
+**Live-verified through the real browser form itself, not just the API** — two submissions, same catalog, genuinely different results:
+
+1. *"energetic late-90s alt-rock, female vocals, no explicit lyrics"*, budget $2.00 → selected Neon Skyline + Concrete Bloom (the first 2 of 3 real fits, budget-truncated in catalog order — Static Prayer also fit but the $2 budget didn't reach it). $2.00 settled, submitAllocation tx `0x778bd12a...`, both artists paid.
+2. *"uplifting instrumental synthwave for a road trip montage"*, budget $1.00 → selected **Golden Hour Drive only** — the same track structure, three of the five other tracks from run 1 correctly re-rejected with brief-specific reasoning (e.g. Concrete Bloom: *"it's not synthwave in genre or sonic character, and it's not instrumental"*). $1.00 settled, submitAllocation tx `0x1a249c71...`, artist paid.
+
+Confirmed via direct DOM inspection mid-test that every existing section (hero, two-sided framing, mechanism steps, money-flow proof, other verticals) still rendered correctly after the new form was added — zero console errors across both real submissions.
+
+`npm test`: 282 passing, unchanged (no contract-layer changes this entry) — the refactor of `demo-acquisition.js` was re-verified live, not just by inspection, since it isn't covered by the Hardhat test suite.
+
+**Rate-limiting decision:** 3 requests per IP per 10 minutes. Reasoning stated in `acquisition/server.js`'s own comment — each request is 6 real Claude calls plus 6-10 real on-chain transactions, both genuinely costly, same category of concern the exploit-bounty endpoint's own rate limiter already addresses for a different vertical.
+
+---
+
+## Post-submission: Tier 1 Rights-Claim Bonding — self-assert + bond + dispute window (2026-08-12)
+
+**Context.** Same post-hackathon grant-application phase as the two entries above. Direct response to a real product-maturity critique: nothing in this system previously made a false rights claim carry any cost, and `ArtistRegistry.registerTrack()` is (deliberately, per Phase 1) a bare, unverified self-assertion. This does not fix that gap — it cannot, self-assert + bond never proves ownership — but it makes a false claim economically costly and contestable, which is a real, honest improvement over a bare assertion, stated as exactly that and no more.
+
+**Phase 0 scoping finding, confirmed before writing code:** `ArcIDBond.sol`'s existing dispute-window pattern (`fileIndictment`/`resolveDispute`/`finalizeExpiredDispute`) is single-sided by construction — only the accused's bond is ever at stake; the accuser never bonds anything. Rights-Claim Bonding needed a genuinely two-sided version (claimant AND challenger both stake capital, loser's forfeits to winner) — a real structural difference, not a relabel. New contract, `RightsClaimBond.sol`, reusing `ArtistRegistry` read-only rather than extending either existing contract.
+
+**What was added:**
+
+| Area | What |
+|---|---|
+| `contracts/RightsClaimBond.sol` | `fileClaim()` / `challengeClaim()` (symmetric bond match, a deliberate v1 simplification) / `finalizeUnchallenged()` (permissionless) / `resolveChallenge()` (owner-only, both directions) / `isLicensable()`. Confirmed, accepted limitation stated in the contract's own NatSpec: a `Challenged` claim has no permissionless timeout — unlike ArcIDBond's optimistic window (which has an honest default: approve an indictment a professional adjudicator already vetted), a raw counter-claim between strangers has no equivalent honest default winner, so a challenged claim can get stuck indefinitely if the owner never acts. Same honesty standard as ArcIDBond's own documented `withdrawBond()`-during-dispute gap. |
+| `test/RightsClaimBond.test.js` | 26 new tests — construction, filing, the genuinely two-sided challenge (both bond-movement directions independently asserted), the unchallenged-pass path, admin config. |
+| `ingestor/src/allocator.js` | New optional `checkLicensable` callback, third check alongside integrity/licensing — strictly opt-in (omit it, existing callers including the live AcquisitionAgent endpoint are unaffected) so this doesn't retroactively require claim-bonding for the demo catalog that predates it. 4 new tests. |
+| `scripts/deploy_rights_claim_bond.js` | Reuses the existing `ArtistRegistry`/collateral token (no redeploy). Demo-scale 120s dispute window, same "scaled for demo, stated plainly" pattern as `ArcIDBond.challengeThreshold`. |
+| `scripts/cli/demo-rights-claim.js` | All three real outcomes in one script, against real deployed contracts. |
+
+**Two real bugs found and fixed during live verification, not glossed over:**
+1. `challenger` never called `approve()` on USDC at all — only claimants did, via `registerAndApprove()`. The very first live run correctly reverted `ERC20InsufficientAllowance` on `challengeClaim()`. Fixed with an `ensureAllowance()` check before every call that needs it, rather than assuming every wallet already approved.
+2. `challenger`'s demo funding only covered one bond, but the demo challenges twice (once per challenge-outcome scenario) and *loses* the first bond by design in the claimant-wins scenario. Fixed by funding `challenger` for two bonds up front.
+
+Both were caught by actually running the script repeatedly, not by inspection — matching this repo's standing verification rule.
+
+**Live-verified, honestly reported — not every path confirmed on every network:**
+
+| Scenario | Local (hardhat) | Real Arc testnet |
+|---|---|---|
+| Unchallenged claim passes | ✅ real txs | ✅ `finalizeUnchallenged()` tx `0xeb9a8fd8...` |
+| Challenged, claimant wins | ✅ real txs | ✅ `resolveChallenge()` tx `0x311dd88e...` — challenger's forfeited bond confirmed moving to claimant |
+| Challenged, challenger wins | ✅ real txs, `isLicensable()` correctly false | ❌ see below |
+
+The third scenario's real-testnet attempt hit a reproducible, unexplained failure: `challengeClaim()` reverted with **no revert data at all** (not a decoded custom error — genuinely empty), at an **identical gas cost (55394) across two separate attempts** with different bond amounts (0.4 USDC and 0.15 USDC). Investigated, not assumed: decoded the failed transaction's calldata directly, confirmed on-chain that the claim was genuinely `Pending`, the window had not expired (confirmed against the actual block timestamp the transaction mined in, not just "now"), the bond amount matched exactly, and both balance and allowance were independently confirmed sufficient via direct contract reads immediately after the failure. Every check the contract itself performs was independently verified as passing — the revert happens somewhere inside the real Circle USDC `transferFrom` call itself, on real Arc testnet specifically (the identical call against `MockUSDC` locally succeeds cleanly, repeatedly). Stopped chasing it further once real testnet funds ran low (deployer balance ended this session at ~0.79 USDC) rather than keep spending real funds on blind retries — a genuine "harder than expected" finding, reported rather than hidden or quietly re-run until it happened to pass.
+
+**Not a contract-correctness question:** the identical `challengeClaim()` logic is exercised identically for the claimant-wins path (which succeeded live on real testnet) and the challenger-wins path (which did not) — the only per-scenario difference is which address calls `resolveChallenge(..., false)` afterward, which never got reached. 26 unit tests plus a complete, clean local live run of all three outcomes stand behind the contract logic; only this one path's real-Arc-testnet confirmation is honestly outstanding.
+
+`npm test`: 312 passing, up from 282, zero regressions.
+
+**README** updated with a new "Rights-Claim Bonding — Tier 1 of a Trust Ladder" section: the required "does NOT verify ownership" framing, the stuck-challenge limitation stated plainly, and the honest per-scenario live-verification table (not a blanket "verified live" claim).

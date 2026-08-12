@@ -12,7 +12,7 @@
 const { expect } = require("chai");
 const { ethers }  = require("hardhat");
 const {
-  ingest, corpusLeaf, allocationLeaf, CorpusMismatchError, UnlicensedTrackError,
+  ingest, corpusLeaf, allocationLeaf, CorpusMismatchError, UnlicensedTrackError, UnbondedRightsClaimError,
 } = require("../ingestor/src/allocator");
 const { buildTree } = require("../ingestor/src/merkle");
 
@@ -97,6 +97,65 @@ describe("allocator (ingestor/src/allocator.js)", function () {
       for (const a of result.allocations) {
         expect(verifyProof(result.allocationRoot, a.leaf, a.proof)).to.equal(true);
       }
+    });
+  });
+
+  describe("unit — optional rights-claim standing check (Rights-Claim Bonding, post-submission)", function () {
+    it("is skipped entirely when checkLicensable is omitted — existing callers unaffected", async function () {
+      const [, artistA] = await ethers.getSigners();
+      const corpus = [FP("t1")];
+      const { root: committedCorpusRoot } = buildTree(corpus.map(corpusLeaf));
+
+      const result = await ingest({
+        corpus, committedCorpusRoot, poolAmount: 100n,
+        resolveArtist: async () => artistA.address,
+        // no checkLicensable passed at all
+      });
+      expect(result.allocations).to.have.lengthOf(1);
+    });
+
+    it("rejects a track whose rights claim isn't Upheld when checkLicensable is provided", async function () {
+      const [, artistA] = await ethers.getSigners();
+      const corpus = [FP("t1")];
+      const { root: committedCorpusRoot } = buildTree(corpus.map(corpusLeaf));
+
+      await expect(
+        ingest({
+          corpus, committedCorpusRoot, poolAmount: 100n,
+          resolveArtist: async () => artistA.address,
+          checkLicensable: async () => false,
+        })
+      ).to.be.rejectedWith(UnbondedRightsClaimError);
+    });
+
+    it("proceeds normally when checkLicensable resolves true for every track", async function () {
+      const [, artistA, artistB] = await ethers.getSigners();
+      const corpus = [FP("t1"), FP("t2")];
+      const ownerByFp = { [FP("t1")]: artistA.address, [FP("t2")]: artistB.address };
+      const { root: committedCorpusRoot } = buildTree(corpus.map(corpusLeaf));
+
+      const result = await ingest({
+        corpus, committedCorpusRoot, poolAmount: 100n,
+        resolveArtist: async (fp) => ownerByFp[fp],
+        checkLicensable: async () => true,
+      });
+      expect(result.allocations).to.have.lengthOf(2);
+    });
+
+    it("rejects on the first unlicensed-claim track even if others in the corpus are fine", async function () {
+      const [, artistA, artistB] = await ethers.getSigners();
+      const corpus = [FP("t1"), FP("t2")];
+      const ownerByFp = { [FP("t1")]: artistA.address, [FP("t2")]: artistB.address };
+      const licensableByFp = { [FP("t1")]: true, [FP("t2")]: false };
+      const { root: committedCorpusRoot } = buildTree(corpus.map(corpusLeaf));
+
+      await expect(
+        ingest({
+          corpus, committedCorpusRoot, poolAmount: 100n,
+          resolveArtist: async (fp) => ownerByFp[fp],
+          checkLicensable: async (fp) => licensableByFp[fp],
+        })
+      ).to.be.rejectedWith(UnbondedRightsClaimError);
     });
   });
 

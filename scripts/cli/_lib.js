@@ -32,11 +32,13 @@ const ConsumerSessionKeyGuardABI = loadABI("ConsumerSessionKeyGuard.sol/Consumer
 const ArtistRegistryABI     = loadABI("ArtistRegistry.sol/ArtistRegistry.json");
 const TrainingPoolABI       = loadABI("TrainingPool.sol/TrainingPool.json");
 const CompensationClaimABI  = loadABI("CompensationClaim.sol/CompensationClaim.json");
+const RightsClaimBondABI    = loadABI("RightsClaimBond.sol/RightsClaimBond.json");
 
 const ERC20_ABI = [
   "function approve(address spender, uint256 amount) returns (bool)",
   "function balanceOf(address account) view returns (uint256)",
   "function transfer(address to, uint256 amount) returns (bool)",
+  "function allowance(address owner, address spender) view returns (uint256)",
 ];
 
 // ---------------------------------------------------------------------------
@@ -152,6 +154,21 @@ function loadTrainingCompensationDeployment(network = "arcTestnet") {
     console.error(`\nTraining Compensation deployment not found: ${p}`);
     console.error(
       `Run \`npx hardhat run scripts/deploy_training_compensation.js --network ${network}\` first.\n`
+    );
+    process.exit(1);
+  }
+  return JSON.parse(fs.readFileSync(p, "utf8"));
+}
+
+function loadRightsClaimBondDeployment(network = "arcTestnet") {
+  const p = path.join(
+    __dirname,
+    `../../deployments/${network}_rights_claim_bond.json`
+  );
+  if (!fs.existsSync(p)) {
+    console.error(`\nRightsClaimBond deployment not found: ${p}`);
+    console.error(
+      `Run \`npx hardhat run scripts/deploy_rights_claim_bond.js --network ${network}\` first.\n`
     );
     process.exit(1);
   }
@@ -300,6 +317,7 @@ module.exports = {
   loadDeployment,
   loadSessionGuardDeployment,
   loadTrainingCompensationDeployment,
+  loadRightsClaimBondDeployment,
   getProvider,
   getContracts,
   getGuardContract,
@@ -315,5 +333,6 @@ module.exports = {
   ArtistRegistryABI,
   TrainingPoolABI,
   CompensationClaimABI,
+  RightsClaimBondABI,
   ERC20_ABI,
 };

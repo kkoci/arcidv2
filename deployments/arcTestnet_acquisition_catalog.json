@@ -1,0 +1,27 @@
+{
+  "network": "arcTestnet",
+  "timestamp": 1786555468,
+  "trainingCompensationDeployment": "C:\\Users\\kkoci\\Documents\\LeptonHackathon\\arcid2\\deployments\\arcTestnet_training_compensation.json",
+  "company": {
+    "address": "0x1e46017454673bC5201a1a10Cb03256E6faB3eC4"
+  },
+  "artists": {
+    "A": {
+      "address": "0x7EE2b83d3D64342cA9a7F582770C80b8a0F83240"
+    },
+    "B": {
+      "address": "0x4EF355ca6cbdCDF0D90A725dC65440A0FA17B2cA"
+    },
+    "C": {
+      "address": "0xE062308dd0a15641362d9a3076ff9D2Ae56Cb642"
+    }
+  },
+  "fingerprintByTrackId": {
+    "neon-skyline": "0xd970751a3bd2992b4ed413410a068ff38f09af0fd4370f8bb059c1ab7a547216",
+    "quiet-static": "0x1227dec6aa7d337c29d53541f7bb04bb36c8179988df163b2a2b2c5c6db660f6",
+    "concrete-bloom": "0x94da62cae0c364d37344d57da7321bc6a00b3b1dd7622036a4f7972fccf73399",
+    "bassline-riot": "0x1a0f31bca31e8daeb23491bf532839da2c1420ad2382ce41e5a49461f7959b2f",
+    "golden-hour-drive": "0x0819b2ef59042b596b4f039b9dc7ce20fc588a8e8321cabe735d0d3e39a2b525",
+    "static-prayer": "0x4fb50c891de8f6df048d349822abcb117949b1066efd1266bd613dc00f28f30a"
+  }
+}

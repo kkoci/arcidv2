@@ -1,6 +1,7 @@
 import { useRef } from "react";
 import SealMark              from "./components/SealMark.jsx";
 import TrainingCompensationCard from "./components/TrainingCompensationCard.jsx";
+import AcquisitionForm       from "./components/AcquisitionForm.jsx";
 
 // User-journey framing, not a developer/contract-call flow — copy-only
 // revision, same underlying mechanism as before (see CHANGELOG.md).
@@ -147,8 +148,11 @@ export default function App() {
           }}>
             <b style={{ color: "var(--text-muted)" }}>Scope, stated plainly:</b> demo-scale corpus (a
             handful of tracks, not millions), fingerprint hashes rather than real audio fingerprinting,
-            and an equal-split payout rule rather than usage-weighted — proving the settlement pipeline
-            works end to end, real funds, real Merkle proofs, real on-chain checks.
+            and a licensing catalog limited to what's currently registered — proving the settlement
+            pipeline works end to end, real funds, real Merkle proofs, real on-chain checks.
+          </div>
+          <div style={{ marginBottom: "16px" }}>
+            <AcquisitionForm />
           </div>
           <TrainingCompensationCard />
         </div>

@@ -172,6 +172,52 @@ cd frontend && npm run dev            # ProofOfExploitCard talks to it directly
 
 ---
 
+## Rights-Claim Bonding — Tier 1 of a Trust Ladder
+
+**This does NOT verify legal ownership.** Nowhere in this system — not the
+contract, not the docs, not the frontend — should you see "verified
+rights" or "proven ownership." What it actually does: an artist stakes a
+USDC bond alongside a rights claim on a track they've registered. A
+dispute window opens. Anyone can challenge the claim by staking their own
+bond and a counter-claim. If nobody challenges, the claim stands once the
+window closes and the track becomes licensable. If challenged, an owner
+resolution moves both bonds to whichever side is judged correct — the
+loser forfeits their stake to the winner. **A false claim now carries real
+financial consequence, and a conflicting claim has a real, contestable,
+on-chain path — that's the whole mechanism, stated plainly.**
+
+This is **Tier 1** of a trust ladder, the floor, not the ceiling. Higher
+tiers — co-signing by a rights-management platform, document evidence,
+institutional attestation — are a real, honest roadmap item, not
+something already built.
+
+**Known, accepted limitation — not a bug, stated the same way ArcIDBond's
+own `withdrawBond()`-during-dispute gap is documented:** a *Challenged*
+claim has no automatic timeout or default resolution. Only the contract
+owner's `resolveChallenge()` can close it out. If the owner never acts, a
+challenged track stays unlicensable indefinitely — there is no
+permissionless path to resolve it in this version.
+
+**New contract:** `RightsClaimBond.sol`, reusing `ArtistRegistry` (read-only,
+to confirm the claimant actually registered the track) — not an extension
+of it, and not an extension of `ArcIDBond`'s dispute-window pattern, which
+is single-sided (only the accused's bond is ever at stake). This needed a
+genuinely two-sided bond instead — see CHANGELOG.md's Rights-Claim
+Bonding entry for the full scoping rationale.
+
+**Live-verified:** all three real outcomes (unchallenged pass,
+challenge-resolved-claimant-wins, challenge-resolved-challenger-wins)
+confirmed on a local chain with real transactions. Two of the three
+(unchallenged pass, claimant-wins) additionally confirmed live on real
+Arc testnet with real transaction hashes. The third (challenger-wins) hit
+a reproducible, unexplained revert specific to real Arc testnet after two
+separate attempts — see CHANGELOG.md for the full investigation; the
+contract logic itself is not in question (26 passing tests, a clean full
+local run of all three outcomes), but the live-on-real-testnet claim for
+that one specific path is honestly unconfirmed, not asserted.
+
+---
+
 ## The Moat
 
 Three properties stacked. As of 2026-08-09, no found competitor combines all three:

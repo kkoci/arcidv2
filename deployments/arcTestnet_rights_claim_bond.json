@@ -1,0 +1,10 @@
+{
+  "network": "arcTestnet",
+  "timestamp": 1786562425,
+  "addresses": {
+    "RightsClaimBond": "0x2e4FC189d1Ead78244FF411f94114CB5c141F180",
+    "ArtistRegistry": "0x6D4A2C82b3aEb6eFFca6dffd8cfA2008601359CA",
+    "collateralToken": "0x3600000000000000000000000000000000000000"
+  },
+  "disputeWindowSeconds": 120
+}

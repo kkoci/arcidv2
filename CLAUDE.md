@@ -706,6 +706,224 @@ settlement clears; not built this pass, stated in CHANGELOG.md.
 
 ---
 
+**IMPORTANT — as of 2026-08-12, the Encode hackathon submission window is
+over. All work below this point is post-hackathon grant-application work,
+not a resubmission.** The repo pivoted from three co-equal demo verticals
+to a single lead product — **Licensed AI Training Compensation Rail** —
+with the two original verticals (Data SLA Bond, Proof-of-Exploit Bounty)
+kept fully working on-chain but no longer rendered on the live frontend
+or positioned as co-equal in README's opening. See the "Frontend — full
+product pivot" entry below and CHANGELOG.md for the complete rationale.
+Don't push toward hackathon-deadline framing in this project going
+forward — deployment/polish/real-verification quality now matters more
+than demo speed.
+
+Licensed AI Training Compensation Rail — a third vertical, real TEE
+ingestion (post-submission, arcid2 Phase 1-7 — see CHANGELOG.md):
+```
+contracts/ArtistRegistry.sol            Permissionless track registration (fingerprintHash +
+                                         rightsMetadataHash commitment) — same trust shape as
+                                         ExploitBounty.registerTarget(), no TEE-gating on the
+                                         artist (the trust-critical identity in this vertical
+                                         is the ingestion enclave, not the registrant).
+contracts/TrainingPool.sol              AI company escrow + Merkle-root corpus commitment.
+                                         Structurally closest to ExploitBounty.sol (single
+                                         full-amount release, distributed/withdrawn mutual
+                                         exclusion), not ArcIDBond — no slashing shape applies.
+contracts/CompensationClaim.sol         The N-recipient payout layer — genuinely new shape.
+                                         Ingestor gating mirrors ExploitBounty.submitVerdict()
+                                         (authorizedIngestor + per-call IArcIDRegistry check).
+                                         claim() is a real MerkleProof.verify() claim, not a
+                                         simplified direct-transfer loop.
+contracts/mocks/MerkleProofTestHelper.sol  Test-only — exposes OZ's internal MerkleProof.verify()
+                                         so the off-chain JS tree builder's proofs are checked
+                                         against the REAL on-chain verifier, not just
+                                         self-consistency with its own reimplementation.
+ingestor/                               New top-level service — the real TEE ingestion enclave.
+                                         src/merkle.js (hand-rolled, OZ-compatible sorted-pair
+                                         tree, double-hashed leaves), src/allocator.js (integrity
+                                         check against the committed corpus root + licensing
+                                         check against ArtistRegistry + equal-split-per-track
+                                         allocation), src/signer.js (EIP-191, same pattern as
+                                         oracle/src/signer.js), src/attest.js/Dockerfile/
+                                         docker-compose.phala.yml (direct structural port of the
+                                         oracle's real Phala TDX deployment pattern — not yet
+                                         actually deployed to a live Phala CVM, see below).
+scripts/deploy_training_compensation.js Deploys all three contracts against the EXISTING
+                                         ArcIDRegistryV2 (never redeployed). Provisions a
+                                         dedicated ingestor wallet via the same DCAP-prototype-
+                                         quote flow deploy_standalone.js/deploy_exploit_bounty.js
+                                         already use. Wires TrainingPool.authorizedDistributor
+                                         to the CompensationClaim CONTRACT address (not the
+                                         ingestor EOA) and CompensationClaim.authorizedIngestor
+                                         to the ingestor wallet — easy to get backwards.
+scripts/cli/demo-training-compensation.js  npm run demo:training-compensation — register →
+                                         deposit → ingest → claim, one script, real HTTP call
+                                         to the real ingestor service.
+```
+61 new tests at completion (270 total, up from 209) — `test/ArtistRegistry.test.js`,
+`test/TrainingPool.test.js`, `test/merkle.test.js` (proofs verified against the
+REAL on-chain `MerkleProof.verify()`, not just JS self-consistency),
+`test/allocator.test.js` (includes a real integration test against deployed
+`ArtistRegistry`/`TrainingPool`, not mocks), `test/ingestorSigner.test.js`,
+`test/CompensationClaim.test.js` (includes a full Phase-2/3/4 pipeline
+integration test). Live-verified on real Arc testnet with real transaction
+hashes for the full register→deposit→ingest→submit→claim cycle — see
+CHANGELOG.md for the tx hashes and for an anomaly investigation (small
+pre-existing "dust" balance on freshly-generated demo wallets, traced to
+its root cause via direct transaction-receipt decoding, confirmed
+unrelated to the contracts).
+
+**Honest gap, unresolved:** the ingestion enclave is built to run inside a
+real Phala TDX CVM (identical Dockerfile/compose pattern to the oracle's
+already-proven real deployment) but has never actually been deployed
+there — that needs the same manual Phala dashboard/credential steps every
+other Phala deployment in this repo needs, which this session has no
+access to. Every live verification of this vertical so far has run the
+ingestor locally (`USE_REAL_PHALA=false`) against real Arc testnet
+contracts — the on-chain side is fully real, the enclave-hardware-
+attestation side is not yet live.
+
+Frontend — card, then full product pivot, then copy revision
+(post-submission, arcid2, 2026-08-12 — see CHANGELOG.md):
+```
+frontend/src/components/TrainingCompensationCard.jsx  Real Phase 7 Arc testnet transactions
+                                         shown unconditionally + a money-flow visual centerpiece
+                                         (added in the copy-revision pass) + a collapsed
+                                         "▸ Verify the transactions" disclosure holding the
+                                         detailed proof cards + CLI instructions.
+frontend/src/App.jsx                    Full rewrite, twice. First added Training Compensation
+                                         as a third section. Then REMOVED AgentCard/
+                                         VerdictHistory/GatewayPaymentCard/GrantMetricsCard/
+                                         USYCBondCard/ProofOfExploitCard from the render tree
+                                         entirely (not hidden) along with all oracle-stats
+                                         polling — this page no longer talks to that backend.
+                                         New hero, new user-journey mechanism steps, a
+                                         "For AI companies / For artists" two-sided pitch,
+                                         a small secondary "Why ArcID?" note, new footer.
+frontend/src/index.css                  Full palette swap — "Cyber-Organic Dark": Deep Obsidian
+                                         `#090A0F` background, Electric Cyan `#00F5D4` +
+                                         Sonic Violet `#7B2CBF` as the two accents, blended
+                                         into a gradient on the hero headline + primary CTA.
+                                         Superseded the earlier Phase 7 deep-indigo palette AND
+                                         an undocumented later "light modern-SaaS" reskin — see
+                                         Decisions and Rationale below for the current, true palette.
+README.md                               Title and opening repositioned around Training
+                                         Compensation as the lead product; the two earlier
+                                         verticals reframed as "also proven on this protocol"
+                                         evidence, not deleted, not co-equal. New "Rights-Claim
+                                         Bonding" section (see below).
+```
+**Nothing deleted** in the pivot — old contract/test/CLI files for both earlier
+verticals, and the now-unimported frontend components, all still exist and
+still work; only what `App.jsx` renders changed. Every pass verified via a
+real headless-Chromium run (no project skill existed for this; installed
+Playwright ad hoc) — screenshotted, programmatically grepped the rendered
+page's actual text (not just visual inspection), zero console errors,
+checked mobile width (375-390px) specifically each time.
+
+AcquisitionAgent — a real judgment layer for Training Compensation
+(post-submission, arcid2, 2026-08-12 — see CHANGELOG.md):
+```
+acquisition/src/agent.js                selectTracks() — one real Claude tool-use call per
+                                         candidate track (same pattern as consumer/src/
+                                         adjudicator.js), budget-truncated selection in
+                                         catalog order (auditable, not a hidden ranking call).
+acquisition/src/catalog.js              6 demo tracks / 3 artists, off-chain — ArtistRegistry
+                                         only stores a rightsMetadataHash commitment, not
+                                         actual descriptive metadata, so this supplies the
+                                         genre/era/mood/vocals fields the agent judges against.
+                                         Deliberately built with genuine ambiguity (shared
+                                         individual tags without full fit) so judgment is
+                                         required, not a keyword filter.
+acquisition/src/settle.js               The settlement handoff, shared by the CLI and the
+                                         server (Phase "License Training Data" below) — one
+                                         implementation, not two copies.
+scripts/cli/demo-acquisition.js         npm run demo:acquisition -- --brief "..." --budget N
+```
+Scope boundary enforced, not just stated: the agent's judgment ends at
+`selectTracks()`'s return value — everything downstream (fund escrow,
+corpus verification, licensing, equal-split, Merkle claims) is the
+identical, unmodified Phases-1-7 code. Live-verified with three real
+briefs against the same 6-track catalog, genuinely different selections
+each time (including one brief that produced **zero** selections — the
+agent rejected even the closest tag-match on a genuine mood mismatch,
+stronger evidence of real judgment than a positive selection would have
+been) — full reasoning text in CHANGELOG.md's entry.
+
+License Training Data — the real product HTTP surface (post-submission,
+arcid2, 2026-08-12 — see CHANGELOG.md):
+```
+acquisition/server.js                   POST /api/acquire { brief, budget } -> 202 { jobId },
+                                         GET /api/acquire/:jobId to poll. ASYNC job+poll, not
+                                         synchronous — a real timed run showed ~45-51s total
+                                         (6 real Claude calls + 6-10 real on-chain txs), too
+                                         long/fragile for one held-open request. Per-IP rate
+                                         limit (3/10min) — real Claude + real gas cost per hit.
+scripts/setup_acquisition_catalog.js    One-time, idempotent, persistent setup (company + 3
+                                         artist wallets, stable-hash catalog registration) so
+                                         the live endpoint doesn't redo registration/funding
+                                         on every request — unlike demo-acquisition.js's
+                                         fresh-wallets-every-run CLI demo.
+frontend/src/components/AcquisitionForm.jsx  The actual product form — "License Training Data"
+                                         title, "License matching tracks" button, NO "test/
+                                         try/demo" language anywhere per explicit framing rule.
+                                         Live-updating evaluation feed as each track's real
+                                         Claude judgment lands, then real settlement
+                                         confirmation with real tx links.
+```
+Copy framing is deliberate: this is positioned as the actual product
+surface running on Arc testnet (the current network for the whole repo),
+not a fenced-off "try our demo" toy. Live-verified through the real
+browser form itself (not just curling the API) — two different briefs,
+genuinely different real settlements, zero console errors.
+
+Tier 1 Rights-Claim Bonding — self-assert + bond + dispute window
+(post-submission, arcid2, 2026-08-12 — see CHANGELOG.md):
+```
+contracts/RightsClaimBond.sol           fileClaim() / challengeClaim() (genuinely two-sided —
+                                         claimant AND challenger both stake capital, loser's
+                                         forfeits to winner; NOT a relabel of ArcIDBond's
+                                         single-sided Dispute struct, where only the accused's
+                                         bond is ever at stake) / finalizeUnchallenged()
+                                         (permissionless) / resolveChallenge() (owner-only,
+                                         both directions) / isLicensable().
+ingestor/src/allocator.js               New optional checkLicensable callback — third check
+                                         alongside integrity/licensing, strictly opt-in (omit
+                                         it, the AcquisitionAgent endpoint's demo catalog,
+                                         never claim-bonded, keeps working unchanged).
+scripts/deploy_rights_claim_bond.js     Reuses the existing ArtistRegistry/collateral token.
+                                         Demo-scale 120s disputeWindow (owner-tunable later,
+                                         no redeploy needed) — same "scaled for demo, stated
+                                         plainly" pattern as ArcIDBond.challengeThreshold.
+scripts/cli/demo-rights-claim.js        npm run demo:rights-claim — all three real outcomes
+                                         (unchallenged pass, claimant wins, challenger wins)
+                                         in one script.
+```
+**Known, accepted limitation, stated in the contract's own NatSpec and in
+README:** a `Challenged` claim has NO permissionless auto-resolution or
+timeout — only `resolveChallenge()` (owner) can close it. Unlike
+ArcIDBond's optimistic window (honest default: approve an indictment a
+professional adjudicator already vetted), a raw counter-claim between
+strangers has no equivalent honest default winner, so a challenged claim
+can get stuck indefinitely if the owner never acts. Same honesty standard
+as ArcIDBond's own documented `withdrawBond()`-during-dispute gap.
+
+**Verification reported exactly as it happened, not smoothed over:** all
+three outcomes fully verified on a local chain (real transactions). Two
+of three (unchallenged-pass, claimant-wins) also confirmed live on real
+Arc testnet with real tx hashes. The third (challenger-wins) hit a
+reproducible, unexplained empty revert specific to real Arc testnet
+across two separate attempts — investigated via direct on-chain state
+reads and transaction-receipt decoding (every precondition the contract
+checks confirmed correct), not resolved, stopped once real testnet funds
+ran low rather than keep spending real money on blind retries. See
+CHANGELOG.md's entry for the full investigation. The contract logic
+itself is not in question — 26 passing tests plus the clean local run —
+only that one path's real-testnet confirmation is honestly outstanding.
+
+---
+
 ## ArcIDBond Contract Events
 
 These events are the source of truth for the frontend live counters.
