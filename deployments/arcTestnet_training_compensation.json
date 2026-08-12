@@ -1,0 +1,16 @@
+{
+  "network": "arcTestnet",
+  "chainId": 5042002,
+  "deployer": "0x8F43C6a0062D33585d97A54d7f380bc6D52B5440",
+  "timestamp": 1786542044,
+  "addresses": {
+    "ArtistRegistry": "0x6D4A2C82b3aEb6eFFca6dffd8cfA2008601359CA",
+    "TrainingPool": "0x2d187b0209881b9dfd2ef1448aa55Cd82326fa50",
+    "CompensationClaim": "0x33Df2A7b8642cbC68455231dB9833f5Aa1d3BFa5",
+    "ArcIDRegistryV2": "0xf1ad81B9FcB805BB75f3c92B5Db67641B7C729C9",
+    "collateralToken": "0x3600000000000000000000000000000000000000"
+  },
+  "ingestor": {
+    "address": "0x0F83457C92609De36C99Db323a306C755B333B33"
+  }
+}

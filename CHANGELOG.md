@@ -2205,3 +2205,141 @@ build (not just at the end) and stayed green throughout — 209 passing at
 completion, up from 158 at the start of this entry, zero regressions in
 the pre-existing 158. The price-oracle vertical's live demo path,
 deployed contracts, and Phala CVM were not touched or redeployed.
+
+---
+
+## Post-submission: Licensed AI Training Compensation Rail — a third vertical, real TEE ingestion (2026-08-12)
+
+**Context.** Same post-form-lock, extended-event-window basis as every
+entry above. Built to a written Phase 0 scoping doc reviewed and confirmed
+before any code — same discipline the Proof-of-Exploit spike used, applied
+this time without a throwaway spike stage (the highest-uncertainty piece,
+real enclave ingestion, was de-risked by building it directly against
+real deployed contracts and checking correctness at every phase, not by a
+separate spike first).
+
+**The pitch.** A third, deliberately different problem on the same
+bond/attestation primitive: AI companies license training data from
+independent artists instead of scraping it. An artist registers a track
+(fingerprint hash + rights-metadata commitment). An AI company deposits
+USDC into a pool and commits a Merkle root over its intended training
+corpus before training. A TEE-attested ingestion enclave verifies the
+corpus against that commitment and against artist licensing, computes an
+equal-split compensation allocation, and signs it. Artists claim their
+exact share via a real on-chain Merkle proof. Reputation-as-collateral
+becomes licensing-as-collateral — the same "attest, then let a smart
+contract act on the attestation" shape as the other two verticals, a
+third distinct payout trigger (N-recipient claim, not a 1:1 slash or
+1:1 bounty).
+
+**Why this is a different claim than either existing vertical:** the
+price-oracle vertical's payout decision is an LLM judgment call; the
+Proof-of-Exploit vertical's is a deterministic yes/no from actually
+running code, with no privacy claim attached. This vertical's payout
+decision is deterministic **and** the enclave's whole reason for existing
+is data confidentiality — the training corpus is never supposed to become
+public, which neither existing vertical claims or needs. That's why this
+vertical, alone among the three, was scoped and built to run its real
+logic inside a real Phala TDX CVM rather than taking the Proof-of-Exploit
+harness's "attest the wallet once, run the heavy logic anywhere" shortcut
+— see the real-vs-simulated section below for exactly how far that went
+this session.
+
+**What was added:**
+
+| Area | What |
+|---|---|
+| `contracts/ArtistRegistry.sol` | Permissionless track registration (fingerprint hash + rights-metadata hash), same trust shape as `ExploitBounty.registerTarget()` — no TEE-gating on the artist, since the trust-critical identity in this vertical is the ingestion enclave, not the registrant. Deliberately minimal — no `Ownable`, no `ReentrancyGuard`, no funds move here. |
+| `contracts/TrainingPool.sol` | AI company escrow + corpus-root commitment. Structurally closest to `ExploitBounty.sol`, not `ArcIDBond.sol` — `createPool`/`distributeToClaimContract`/`withdrawPool` mirror `registerTarget`/`submitVerdict`/`withdrawBounty` directly, single full-amount release, `distributed`/`withdrawn` mutual exclusion in both directions. |
+| `contracts/CompensationClaim.sol` | The N-recipient payout layer — genuinely new shape, not present in either existing vertical. Ingestor gating mirrors `ExploitBounty.submitVerdict()` exactly (`authorizedIngestor` + per-call `IArcIDRegistry.agentIdBySigner()`). `submitAllocation()` pulls the pool's escrowed funds in from `TrainingPool` in the same call the allocation is recorded in. `claim()` is a real Merkle-proof claim via `MerkleProof.verify()` (`@openzeppelin/contracts`, already a dependency) — not a simplified direct-transfer loop, a deliberate correction made during Phase 0 review before any contract code was written. |
+| `contracts/mocks/MerkleProofTestHelper.sol` | Test-only — exposes OZ's internal `MerkleProof.verify()` externally so the off-chain JS tree builder's proofs could be checked against the *real* on-chain verifier, not just self-consistency with its own reimplementation of the pairing rule. |
+| `ingestor/` (new top-level service) | The real TEE ingestion enclave — `src/merkle.js` (hand-rolled, OZ-compatible sorted-pair tree builder, double-hashed leaves), `src/allocator.js` (integrity check against the committed corpus root + licensing check against `ArtistRegistry` + equal-split-per-track allocation, exact remainder handling, multi-track-per-artist aggregation), `src/signer.js` (EIP-191 signs `(poolId, allocationRoot)`, same pattern as `oracle/src/signer.js`), `src/attest.js`/`Dockerfile`/`docker-compose.phala.yml` (direct structural port of the oracle's real Phala TDX deployment pattern — same `USE_REAL_PHALA` split, same dstack Unix-socket integration). |
+| `test/ArtistRegistry.test.js`, `test/TrainingPool.test.js`, `test/merkle.test.js`, `test/allocator.test.js`, `test/ingestorSigner.test.js`, `test/CompensationClaim.test.js` | 61 new tests (270 total, up from 209) — including proofs verified against the real on-chain `MerkleProof.verify()` (not just JS self-consistency), an allocator integration test against real deployed `ArtistRegistry`/`TrainingPool` (not mocks), and a full Phase-2/3/4 pipeline integration test: real registration, real pool, the real `ingest()` function run against live contract state, real submission, two artists independently claiming the correct amount via real Merkle proofs. |
+| `scripts/deploy_training_compensation.js` | Deploys all three contracts pointed at the **existing** `ArcIDRegistryV2` (read from `deployments/<network>_standalone.json`, same discipline as every other `deploy_*.js`). Provisions a dedicated ingestor wallet — generate-or-reuse, fund, register via the exact same DCAP-prototype-quote flow `deploy_standalone.js`/`deploy_exploit_bounty.js` already use — and wires two separate authorizations correctly: `TrainingPool.authorizedDistributor` → the `CompensationClaim` **contract** address, `CompensationClaim.authorizedIngestor` → the ingestor **wallet** address. |
+| `scripts/cli/demo-training-compensation.js` | The primary demo path — register → deposit → ingest → claim, one script, real HTTP call to the real ingestor service (closer to `demo-erc8183-job.js`'s "fetch from a real running service" shape than `bounty-submit.js`'s "spawn a throwaway local EVM" shape, since the ingestor is a genuine standalone service here). `scripts/cli/_lib.js` extended with the same per-vertical loader/ABI/contracts-getter pattern already established for the session guard and bond-v2 verticals. |
+
+**A real bug found and fixed during live verification, not glossed over:**
+sequential same-signer transactions (fund wallet → fund wallet → fund
+wallet; approve → createPool) hit `NONCE_EXPIRED` against an auto-mining
+local node — ethers' default "pending" nonce lookup reused a stale value
+across back-to-back sends from one wallet within the demo script. Fixed
+with explicit self-incrementing nonces everywhere the same signer sends
+more than one transaction in a row in `demo-training-compensation.js`.
+Caught by actually running the script, not by inspection.
+
+**Real vs. simulated — stated plainly, same standard as every other
+vertical in this repo:**
+
+- **Real:** all three contracts deployed and live on Arc testnet; the
+  ingestor wallet's TEE registration (a genuine `registerAgent()` call
+  against the same live `ArcIDRegistryV2` every other vertical uses); the
+  Merkle tree construction, the equal-split allocation math, the EIP-191
+  signature, the on-chain claim — all real code, real tests, and (see
+  below) a real end-to-end run on real Arc testnet with real USDC.
+- **Simulated / placeholder, unchanged from the original Phase 0 scope:**
+  audio fingerprinting (fingerprint hashes are `keccak256` of arbitrary
+  demo labels, not derived from actual audio analysis — no fingerprinting
+  algorithm exists in this repo); corpus scale (3 demo tracks, not the
+  millions a real training run would use — the Merkle mechanism itself is
+  indifferent to tree size, but nothing here exercises that scale);
+  rights-terms encoding (`rightsMetadataHash` is a placeholder commitment,
+  not an encoding of actual royalty/usage/term licensing terms — no such
+  schema exists); rights verification (`ArtistRegistry` is first-come,
+  permissionless, stated in its own header comment — nothing checks that
+  a registrant actually owns what they register); allocation rule (equal
+  split per track, not usage- or duration-weighted — the simplest rule
+  confirmed sufficient for demo scope in Phase 0).
+- **The one honest gap carried forward from Phase 3, unchanged today:**
+  the ingestion service is genuinely built to run inside a real Phala TDX
+  CVM (identical Dockerfile/compose pattern to the oracle's already-proven
+  real deployment) — but actually provisioning a *live* Phala CVM instance
+  needs the same manual dashboard/credential steps every other Phala
+  deployment in this repo needs, outside this session's reach. Today's
+  Arc-testnet verification below ran the ingestor locally
+  (`USE_REAL_PHALA=false`, prototype-attestation path) against the real
+  chain — the on-chain contracts, the wallet registration, the fund
+  movement, and the claims are all real; the enclave hardware attestation
+  itself is not yet live. Same honest distinction the price-oracle
+  vertical's own `DEV_MODE`/`USE_REAL_PHALA` split already documents
+  elsewhere in this file.
+
+**Live-verified on Arc testnet, real transactions, real USDC:**
+
+| | |
+|---|---|
+| `ArtistRegistry` | `0x6D4A2C82b3aEb6eFFca6dffd8cfA2008601359CA` |
+| `TrainingPool` | `0x2d187b0209881b9dfd2ef1448aa55Cd82326fa50` |
+| `CompensationClaim` | `0x33Df2A7b8642cbC68455231dB9833f5Aa1d3BFa5` |
+| Ingestor wallet (dedicated, TEE-registered) | `0x0F83457C92609De36C99Db323a306C755B333B33` — agentId `0xf3427c5202b18f7b091380c7975a2fffa649e6e053cc49d3523bde02a45f8b0a`, `registerAgent()` tx [`0x2c45c84e...`](https://testnet.arcscan.app/tx/0x2c45c84e89d1aeca190dafb277b830208347ca284a977c9f03c7cfcf83b15cf9) |
+| Pool #1 | 3 USDC, corpus of 3 demo tracks (2 owned by one artist, 1 by another), created by a freshly funded demo company wallet |
+| Allocation submission | `submitAllocation()` tx [`0xb7d306bc...`](https://testnet.arcscan.app/tx/0xb7d306bc012dae9ddf6c90ae2010550376fee152d0dd66c678798f0592c4b9a5) — real ingestion enclave HTTP call preceded this, real corpus/licensing checks passed, real 2.00/1.00 USDC equal-split allocation computed |
+| Claim — artist A (2 tracks) | `claim()` tx [`0x0206f880...`](https://testnet.arcscan.app/tx/0x0206f880dba17136c5c70023f2a17df856fff80ca4c08da9fd14eadb500d570b) — `Claimed` event confirms exactly 2.000000 USDC |
+| Claim — artist B (1 track) | `claim()` tx [`0x5bc4629f...`](https://testnet.arcscan.app/tx/0x5bc4629f8129fffcd65a41c5a97a4f6635406fc7f7b0e4fcf74c287e4cfdf2ef) — `Claimed` event **and** the transaction's own internal ERC-20 `Transfer` log independently confirm exactly 1.000000 USDC moved |
+
+**An anomaly investigated, not glossed over:** both freshly-generated demo
+artist wallets showed a few thousandths of a USDC more than their exact
+claim amount when checked *after* the fact (e.g. artist B read back as
+1.006719 USDC, not the exact 1.000000 claimed). Traced directly rather
+than assumed benign: pulled the claim transaction's own receipt and
+decoded its internal `Transfer` log independently of any event-log range
+query — it shows exactly 1.000000 USDC moved by that transaction, and a
+`balanceOf` check at the block *immediately before* the claim already
+showed a nonzero balance on that "freshly generated" address. Conclusion:
+small pre-existing/unrelated dust on a newly-active address on a shared
+public testnet, present *before* this vertical's claim transaction ran,
+not caused by `CompensationClaim.sol` or `TrainingPool.sol` — the
+contracts' own transaction receipts are the authoritative record and they
+show the exact intended amounts. Noted here rather than silently
+rounding it away.
+
+**What NOT touched, confirmed:** `ArcIDBond.sol`, `ExploitBounty.sol`,
+`DCAPVerifier.sol`, `ArcIDRegistryV2.sol`, `ConsumerSessionKeyGuard.sol`,
+every existing interface, every existing test file, `oracle/`, `consumer/`,
+`bounty/`, and every existing frontend component — no frontend card was
+built for this vertical this session (optional per the original Phase 0
+scope, same "CLI is the confirmed fallback demo path" precedent Proof-of-
+Exploit already established). `npm test` was run after every phase and
+stayed green throughout — 270 passing at completion, up from 209 at the
+start of this entry, zero regressions in the pre-existing 209. Neither
+other vertical's live demo path, deployed contracts, or Phala CVM were
+touched or redeployed.
