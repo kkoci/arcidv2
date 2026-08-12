@@ -56,12 +56,12 @@ function ProofFeed() {
       </div>
       <div className="proof-grid-3">
         {PROOF_RECORDS.map((r) => (
-          <div key={r.tx} className="g" style={{ overflow: "hidden", borderColor: "rgba(18,161,80,.2)" }}>
+          <div key={r.tx} className="g" style={{ overflow: "hidden", borderColor: "rgba(52,211,153,.28)" }}>
             <div style={{
               padding: "13px 16px",
               background: "var(--settle-soft)",
               display: "flex", alignItems: "center", gap: "9px",
-              borderBottom: "1px solid rgba(18,161,80,.2)",
+              borderBottom: "1px solid rgba(52,211,153,.28)",
             }}>
               <SealMark state="sealed" size={16} />
               <span style={{ fontSize: "13px", fontWeight: "700", color: "var(--settle)", letterSpacing: "-0.01em" }}>
@@ -78,7 +78,7 @@ function ProofFeed() {
                   display: "inline-flex", alignItems: "center", gap: "6px",
                   padding: "5px 12px", borderRadius: "6px",
                   background: "var(--settle-soft)",
-                  border: "1px solid rgba(18,161,80,.22)",
+                  border: "1px solid rgba(52,211,153,.3)",
                   color: "var(--settle)", fontSize: "10px", fontWeight: "600",
                   textDecoration: "none",
                 }}
@@ -127,7 +127,7 @@ function RunItCard() {
         </div>
         <div className="mono" style={{
           padding: "12px 14px", borderRadius: "10px",
-          background: "rgba(20,20,25,.03)", border: "1px solid var(--hairline-hi)",
+          background: "rgba(248,249,250,.04)", border: "1px solid var(--hairline-hi)",
           fontSize: "11px", color: "var(--text)", lineHeight: "1.9", overflowX: "auto",
         }}>
           <div style={{ color: "var(--text-faint)" }}># one terminal</div>

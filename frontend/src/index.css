@@ -19,34 +19,36 @@
 @keyframes ctaPulse    { 0%{box-shadow:0 0 0 0 rgba(91,91,240,.45)}70%{box-shadow:0 0 0 14px rgba(91,91,240,0)}100%{box-shadow:0 0 0 0 rgba(91,91,240,0)} }
 
 :root {
-  /* Light, modern-SaaS palette — Stripe/Linear/Mercury territory. One hero
-     accent (indigo), breach/settle reserved for actual breach/settle
-     moments only, never decorative. */
-  --bg:          #FAFAF9;   /* soft off-white base, not stark #fff */
-  --panel:       #FFFFFF;
-  --hairline:    rgba(20,20,25,0.08);
-  --hairline-hi: rgba(20,20,25,0.12);
+  /* Cyber-Organic Dark — data (cyan) transforming into music (violet).
+     One product, two accents used deliberately: cyan for the AI/data/
+     verification side of the story, violet for the creative/artist side,
+     blended in a gradient wherever the page wants to say "one becomes the
+     other" (hero headline, primary CTA). Everywhere else stays quiet. */
+  --bg:          #090A0F;   /* Deep Obsidian */
+  --panel:       #121620;   /* Dark Slate */
+  --hairline:    rgba(248,249,250,0.08);
+  --hairline-hi: rgba(248,249,250,0.14);
 
-  --text:        #17171A;   /* near-black primary text */
-  --text-muted:  rgba(23,23,26,0.56);
-  --text-faint:  rgba(23,23,26,0.36);
+  --text:        #F8F9FA;   /* Crisp White */
+  --text-muted:  rgba(248,249,250,0.62);
+  --text-faint:  rgba(248,249,250,0.40);
 
-  --accent:      #5B5BF0;   /* indigo — single hero accent, replaces brass */
-  --accent-soft: #EEF0FE;   /* tint for accent backgrounds/pills */
-  --breach:      #E5484D;   /* loss/slash */
-  --breach-soft: #FDECEC;   /* soft tint — breach card backgrounds, not harsh red */
-  --settle:      #12A150;   /* success */
-  --settle-soft: #E7F6EE;
+  --accent:       #00F5D4;  /* Electric Cyan — AI/data/verification */
+  --accent-soft:  rgba(0,245,212,0.12);
+  --accent-rgb:   0,245,212;
+  --violet:       #7B2CBF; /* Sonic Violet — the creative/artist side */
+  --violet-soft:  rgba(123,44,191,0.14);
+  --violet-rgb:   123,44,191;
+  --gradient:     linear-gradient(90deg, #00F5D4, #7B2CBF);
 
-  /* Warm amber — fault-injection/testing state only, distinct from accent
-     and breach; kept minimal (small tags, never a card background) so it
-     doesn't compete with the "one accent" rule. */
-  --amber:       #B45309;
-  --amber-soft:  #FEF3E2;
+  --breach:      #F87171;  /* error/rejected state */
+  --breach-soft: rgba(248,113,113,0.12);
+  --settle:      #34D399;  /* success — a real, confirmed payout */
+  --settle-soft: rgba(52,211,153,0.12);
 
-  --shadow-sm: 0 1px 2px rgba(20,20,25,0.04), 0 1px 3px rgba(20,20,25,0.05);
-  --shadow-md: 0 4px 16px rgba(20,20,25,0.06), 0 2px 6px rgba(20,20,25,0.04);
-  --shadow-lg: 0 20px 48px rgba(20,20,25,0.10);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.24), 0 1px 3px rgba(0,0,0,0.20);
+  --shadow-md: 0 4px 20px rgba(0,0,0,0.36), 0 2px 8px rgba(0,0,0,0.24);
+  --shadow-lg: 0 24px 56px rgba(0,0,0,0.48);
 }
 
 html { scroll-behavior: smooth; }
@@ -100,10 +102,13 @@ a { color: inherit; }
    (bond, slash, SLA, etc.) without needing a JS tooltip library. */
 .hint { border-bottom: 1px dotted var(--text-faint); cursor: help; }
 
-/* Subtle radial wash behind the hero — very light indigo, not a hard block. */
+/* Subtle radial wash behind the hero — cyan bleeding into violet, echoing
+   the "data becoming music" gradient without being a hard block. */
 .wash {
   position: absolute; inset: 0; z-index: -1; pointer-events: none;
-  background: radial-gradient(60% 50% at 50% 0%, rgba(91,91,240,0.08), transparent 70%);
+  background:
+    radial-gradient(55% 45% at 30% 0%, rgba(var(--accent-rgb),0.10), transparent 70%),
+    radial-gradient(55% 45% at 75% 10%, rgba(var(--violet-rgb),0.10), transparent 70%);
 }
 
 /* ── Layout system — both app sections share these, so they stay aligned ── */
@@ -154,9 +159,17 @@ a { color: inherit; }
 @media (max-width: 560px) { .mechanism-grid { grid-template-columns: 1fr; } }
 
 /* Header secondary jump-links — hide rather than overflow on mobile;
-   brand/badge/live-status stay visible regardless. */
+   brand/badge/live-status stay visible regardless. (Currently unused —
+   the single-product page has nothing to jump between — kept, not
+   deleted, in case a multi-section layout returns.) */
 .header-jumplinks { display: flex; gap: 8px; }
 @media (max-width: 640px) { .header-jumplinks { display: none; } }
+
+/* Header product subtitle beside the brand mark — hides before the
+   jump-links breakpoint would have, since it's plain descriptive text,
+   not a control. */
+.header-subtitle { font-size: 10.5px; color: var(--text-faint); font-weight: 500; }
+@media (max-width: 560px) { .header-subtitle { display: none; } }
 
 /* Hero live-counter row — wraps instead of forcing horizontal overflow. */
 .stat-row { display: flex; justify-content: center; flex-wrap: wrap; row-gap: 12px; }
