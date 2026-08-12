@@ -944,7 +944,18 @@ These events are the source of truth for the frontend live counters.
 
 ---
 
-## Test Suite (131 passing — run with `npm test`)
+## Test Suite (312 passing — run with `npm test`)
+
+The detailed per-file breakdown below covers only the original price-oracle
+vertical through Phase 6.1 (`test/ArcIDBond.test.js` through
+`test/ArcIDDispute.test.js`). It does **not** yet itemize the Proof-of-Exploit
+vertical (`test/ExploitBounty.test.js`, `test/VulnerableVault.test.js`) or the
+Licensed AI Training Compensation Rail vertical (`test/ArtistRegistry.test.js`,
+`test/TrainingPool.test.js`, `test/merkle.test.js`, `test/allocator.test.js`,
+`test/ingestorSigner.test.js`, `test/CompensationClaim.test.js`,
+`test/acquisitionAgent.test.js`, `test/RightsClaimBond.test.js`) — see each
+vertical's own "Key Files" block above for what those cover. The 131→312
+count includes all of them; only the line-by-line breakdown is incomplete.
 
 ```
 test/ArcIDBond.test.js
@@ -1156,13 +1167,17 @@ CDN layer. The React code never changes — all `fetch("/api/...")` calls work i
 locally (proxied by Vite) and in production (rewritten by Vercel). No CORS, no build-time
 env vars, no conditional logic.
 
-**Why remove the hero/landing section from the frontend?**
+**Why remove the hero/landing section from the frontend?** *(Historical — Phase 7.
+Describes the pre-pivot multi-vertical dashboard layout. That page no longer renders;
+see "Why pivot to a single product page?" below for the current design.)*
 A landing-page hero above the dashboard creates a jarring two-section layout. Stats now
 live inline in the sticky header (bonded / at risk / slashed). The page opens directly
 to the adjudication feed. The "AI agents that cheat lose their deposit." headline is a
 compact one-liner below the header, not a full-viewport section.
 
-**Frontend color palette (Phase 7):**
+**Frontend color palette (Phase 7).** *(Historical — superseded, first by an undocumented
+"light modern-SaaS" reskin, then by the current Cyber-Organic Dark palette below. Kept
+for the record, not the current truth.)*
 - Background: deep indigo `#0d0b24` — clearly purple, not black
 - Glowing orbs: orange top-right `rgba(251,113,3,.18)`, cyan bottom-left `rgba(34,217,232,.12)`
 - Slash / breach: `#fb7103` (vivid orange)
@@ -1170,10 +1185,35 @@ compact one-liner below the header, not a full-viewport section.
 - Oracle / system: `#c084fc` (soft violet)
 - Cards: glassmorphism — `rgba(255,255,255,0.05)` + `backdrop-filter:blur(16px)` over the indigo
 
-**Why split Claude's reasoning in VerdictHistory?**
+**Why split Claude's reasoning in VerdictHistory?** *(Historical — `VerdictHistory.jsx`
+still exists and still works, but is no longer imported by `App.jsx` after the pivot.)*
 Long unbroken paragraphs are hard to scan. The first sentence becomes a bold 14px
 "finding" headline. The rest collapses behind a "▾ Full reasoning" toggle. Cards stay
 compact by default; full rationale is one click away.
+
+**Why pivot to a single product page? (current — post-submission, 2026-08-12)**
+Three co-equal demo verticals in one dashboard reads as "a hackathon project," not "a
+product." A grant reviewer landing on the page should see one clear thing it does. Removed
+`AgentCard`/`VerdictHistory`/`GatewayPaymentCard`/`GrantMetricsCard`/`USYCBondCard`/
+`ProofOfExploitCard` from `App.jsx`'s render tree (not deleted — see the Key Files entry
+above) and rebuilt the page around Licensed AI Training Compensation Rail as the sole
+product, with the other two verticals repositioned in README as supporting evidence
+("also proven on this protocol"), not equal billing.
+
+**Current frontend color palette — "Cyber-Organic Dark" (post-submission, 2026-08-12):**
+- Background: `#090A0F` (Deep Obsidian — near-black, not indigo)
+- Panel/card surface: `#121620`
+- Text: `#F8F9FA`
+- Primary accent: `#00F5D4` (Electric Cyan)
+- Secondary accent: `#7B2CBF` (Sonic Violet)
+- Hero headline / primary CTA: `linear-gradient(90deg, #00F5D4, #7B2CBF)` across the two accents
+
+**Why async job+poll for `/api/acquire` instead of a synchronous response?**
+Measured, not guessed: a real timed run of the full acquire flow (real Claude calls per
+candidate track + real on-chain fund/ingest/submit/claim transactions) took ~45-51s
+end to end. That's too long and too failure-prone to hold one HTTP request open for.
+`POST /api/acquire` returns a `jobId` immediately (202); the frontend polls
+`GET /api/acquire/:jobId` every 1.8s and renders each evaluation as it lands.
 
 ---
 
