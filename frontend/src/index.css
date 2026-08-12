@@ -135,6 +135,12 @@ a { color: inherit; }
 .proof-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
 @media (max-width: 700px) { .proof-grid { grid-template-columns: 1fr; } }
 
+/* Training Compensation section's three "already proven" result cards —
+   same shape as .proof-grid, one more column at desktop width. */
+.proof-grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+@media (max-width: 900px) { .proof-grid-3 { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 560px) { .proof-grid-3 { grid-template-columns: 1fr; } }
+
 /* The interactive "try it" card's internal split (description | form) —
    keeps it genuinely full-width (matching .proof-grid's row above, not
    narrower) while using that width productively instead of stretching a

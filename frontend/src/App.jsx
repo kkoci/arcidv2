@@ -6,6 +6,7 @@ import GatewayPaymentCard from "./components/GatewayPaymentCard.jsx";
 import GrantMetricsCard   from "./components/GrantMetricsCard.jsx";
 import USYCBondCard       from "./components/USYCBondCard.jsx";
 import ProofOfExploitCard from "./components/ProofOfExploitCard.jsx";
+import TrainingCompensationCard from "./components/TrainingCompensationCard.jsx";
 
 const POLL_MS = 5000;
 
@@ -29,6 +30,7 @@ export default function App() {
   const timerRef    = useRef(null);
   const oracleRef   = useRef(null);
   const exploitRef  = useRef(null);
+  const trainingRef = useRef(null);
   const triggerRef  = useRef(null);
 
   // Imperative, no extra state: scrolls the real trigger button (in
@@ -122,6 +124,10 @@ export default function App() {
             background: "none", border: "1px solid var(--hairline-hi)", color: "var(--text-muted)",
             padding: "6px 14px", fontSize: "11px", borderRadius: "8px",
           }}>02 · Exploit Bounty</button>
+          <button onClick={() => scrollTo(trainingRef)} style={{
+            background: "none", border: "1px solid var(--hairline-hi)", color: "var(--text-muted)",
+            padding: "6px 14px", fontSize: "11px", borderRadius: "8px",
+          }}>03 · Training Compensation</button>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "6px", marginLeft: "8px" }}>
           <div style={{
@@ -250,6 +256,24 @@ export default function App() {
             pipeline works end to end, not a general-purpose auditor yet.
           </div>
           <ProofOfExploitCard />
+        </div>
+      </section>
+
+      {/* ── App 3: Licensed AI Training Compensation Rail — same shared
+          container width as the two sections above. ── */}
+      <section ref={trainingRef} className="px-section" style={{ paddingTop: "40px", paddingBottom: "56px", borderTop: "1px solid var(--hairline)" }}>
+        <AppHeader n="03" title="Licensed AI Training Compensation Rail" desc="An AI company commits a Merkle root over its training corpus and escrows USDC. A TEE-attested enclave verifies the corpus and artist licensing, computes a payout, and signs it. Artists claim their exact share with a real Merkle proof." />
+        <div className="section-container">
+          <div style={{
+            fontSize: "10.5px", color: "var(--text-faint)", background: "var(--accent-soft)",
+            border: "1px solid var(--hairline)", borderRadius: "10px", padding: "10px 14px", marginBottom: "16px",
+          }}>
+            <b style={{ color: "var(--text-muted)" }}>Scope, stated plainly:</b> demo-scale corpus (a
+            handful of tracks, not millions), fingerprint hashes rather than real audio fingerprinting,
+            and an equal-split payout rule rather than usage-weighted — proving the settlement pipeline
+            works end to end, real funds, real Merkle proofs, real on-chain checks.
+          </div>
+          <TrainingCompensationCard />
         </div>
       </section>
 
