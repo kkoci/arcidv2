@@ -1,0 +1,24 @@
+services:
+  ingestor:
+    image: kkoci/arcid2-ingestor:latest
+    platform: linux/amd64
+    ports:
+      - "3002:3002"
+    volumes:
+      # Same dstack guest-agent Unix socket the oracle mounts — see
+      # oracle/docker-compose.phala.yml's comment for the tappd.sock vs
+      # dstack.sock naming note if this path is wrong for a given dstack version.
+      - /var/run/dstack.sock:/var/run/dstack.sock
+    environment:
+      PORT: "3002"
+      USE_REAL_PHALA: "true"
+      # Injected via Phala Cloud dashboard (Secrets tab) — do not commit values here.
+      # Learned the hard way on the oracle deployment (see CHANGELOG.md): every
+      # env var config.js actually reads MUST be listed here explicitly, or it
+      # silently falls back to config.js's default / throws on a required() var
+      # no matter what's set in the dashboard.
+      INGESTOR_PRIVATE_KEY: "${INGESTOR_PRIVATE_KEY}"
+      INGESTOR_WALLET_ADDRESS: "${INGESTOR_WALLET_ADDRESS}"
+      ARC_RPC_URL: "${ARC_RPC_URL}"
+      ARTIST_REGISTRY_ADDRESS: "${ARTIST_REGISTRY_ADDRESS}"
+      TRAINING_POOL_ADDRESS: "${TRAINING_POOL_ADDRESS}"
