@@ -29,10 +29,14 @@ function loadABI(relPath) {
 const ArcIDRegistryV2ABI = loadABI("ArcIDRegistryV2.sol/ArcIDRegistryV2.json");
 const ArcIDBondABI        = loadABI("ArcIDBond.sol/ArcIDBond.json");
 const ConsumerSessionKeyGuardABI = loadABI("ConsumerSessionKeyGuard.sol/ConsumerSessionKeyGuard.json");
+const ArtistRegistryABI     = loadABI("ArtistRegistry.sol/ArtistRegistry.json");
+const TrainingPoolABI       = loadABI("TrainingPool.sol/TrainingPool.json");
+const CompensationClaimABI  = loadABI("CompensationClaim.sol/CompensationClaim.json");
 
 const ERC20_ABI = [
   "function approve(address spender, uint256 amount) returns (bool)",
   "function balanceOf(address account) view returns (uint256)",
+  "function transfer(address to, uint256 amount) returns (bool)",
 ];
 
 // ---------------------------------------------------------------------------
@@ -139,6 +143,21 @@ function loadSessionGuardDeployment(network = "arcTestnet") {
   return JSON.parse(fs.readFileSync(p, "utf8"));
 }
 
+function loadTrainingCompensationDeployment(network = "arcTestnet") {
+  const p = path.join(
+    __dirname,
+    `../../deployments/${network}_training_compensation.json`
+  );
+  if (!fs.existsSync(p)) {
+    console.error(`\nTraining Compensation deployment not found: ${p}`);
+    console.error(
+      `Run \`npx hardhat run scripts/deploy_training_compensation.js --network ${network}\` first.\n`
+    );
+    process.exit(1);
+  }
+  return JSON.parse(fs.readFileSync(p, "utf8"));
+}
+
 // ---------------------------------------------------------------------------
 // Provider
 // ---------------------------------------------------------------------------
@@ -190,6 +209,15 @@ function getContracts(addresses, providerOrSigner) {
 
 function getGuardContract(guardAddress, providerOrSigner) {
   return new ethers.Contract(guardAddress, ConsumerSessionKeyGuardABI, providerOrSigner);
+}
+
+function getTrainingCompensationContracts(addresses, providerOrSigner) {
+  return {
+    artistRegistry: new ethers.Contract(addresses.ArtistRegistry, ArtistRegistryABI, providerOrSigner),
+    pool:           new ethers.Contract(addresses.TrainingPool, TrainingPoolABI, providerOrSigner),
+    claimContract:  new ethers.Contract(addresses.CompensationClaim, CompensationClaimABI, providerOrSigner),
+    usdc:           new ethers.Contract(addresses.collateralToken, ERC20_ABI, providerOrSigner),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -271,9 +299,11 @@ module.exports = {
   normalizePrivateKey,
   loadDeployment,
   loadSessionGuardDeployment,
+  loadTrainingCompensationDeployment,
   getProvider,
   getContracts,
   getGuardContract,
+  getTrainingCompensationContracts,
   buildAttestation,
   buildPrototypeQuote,
   signRawDigest,
@@ -282,5 +312,8 @@ module.exports = {
   ArcIDRegistryV2ABI,
   ArcIDBondABI,
   ConsumerSessionKeyGuardABI,
+  ArtistRegistryABI,
+  TrainingPoolABI,
+  CompensationClaimABI,
   ERC20_ABI,
 };
