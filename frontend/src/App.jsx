@@ -2,16 +2,13 @@ import { useRef } from "react";
 import SealMark              from "./components/SealMark.jsx";
 import TrainingCompensationCard from "./components/TrainingCompensationCard.jsx";
 
-// This vertical's own mechanism — artist → corpus commitment → enclave
-// verification → claim. Replaces the old bond/slash 4-step flow, which
-// described a different product (removed from this page — see CHANGELOG.md
-// / README's "Also proven on this protocol" section for the earlier
-// verticals, still live on-chain, just no longer the front door).
+// User-journey framing, not a developer/contract-call flow — copy-only
+// revision, same underlying mechanism as before (see CHANGELOG.md).
 const STEPS = [
-  { n: "01", title: "Artist registers",  body: "A track's fingerprint hash + rights commitment, on-chain." },
-  { n: "02", title: "Corpus committed",  body: "AI company escrows USDC, commits a Merkle root over its training set." },
-  { n: "03", title: "Enclave verifies",  body: "TEE-attested ingestion checks licensing + integrity, computes the split." },
-  { n: "04", title: "Artists claim",     body: "Real USDC, a real Merkle proof — no human review." },
+  { n: "01", title: "Artists opt in",           body: "Register your music and licensing terms." },
+  { n: "02", title: "AI company funds the pool", body: "USDC is escrowed for the training dataset." },
+  { n: "03", title: "Usage is verified privately", body: "A TEE verifies the committed corpus without exposing it." },
+  { n: "04", title: "Artists get paid",         body: "Each artist claims their share onchain." },
 ];
 
 // Real numbers from this vertical's own live Arc testnet run (see
@@ -50,7 +47,7 @@ export default function App() {
       </header>
 
       {/* ── HERO — this product's own thesis, not a platform pitch. ── */}
-      <section className="px-section" style={{ position: "relative", paddingTop: "72px", paddingBottom: "48px", borderBottom: "1px solid var(--hairline)", textAlign: "center", overflow: "hidden" }}>
+      <section className="px-section" style={{ position: "relative", paddingTop: "72px", paddingBottom: "40px", borderBottom: "1px solid var(--hairline)", textAlign: "center", overflow: "hidden" }}>
         <div className="wash" />
         <div style={{ maxWidth: "760px", margin: "0 auto" }}>
           <div style={{
@@ -63,16 +60,15 @@ export default function App() {
             fontSize: "clamp(30px, 7vw, 54px)", fontWeight: "800", letterSpacing: "-0.02em",
             lineHeight: "1.14", color: "var(--text)", marginBottom: "16px",
           }}>
-            Pay independent artists{" "}
+            License music for AI training.{" "}
             <span style={{
               background: "var(--gradient)",
               WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent",
-            }}>automatically</span> when AI trains on their music.
+            }}>Pay artists automatically.</span>
           </h1>
           <p style={{ fontSize: "15.5px", fontWeight: "400", color: "var(--text-muted)", lineHeight: "1.65", maxWidth: "560px", margin: "0 auto 28px" }}>
-            An AI company commits a Merkle root over its training corpus and escrows USDC. A TEE-attested
-            enclave verifies licensing and integrity, computes each artist's share, and signs it. Artists
-            claim their exact payout on-chain — provably, without the corpus ever becoming public.
+            AI companies escrow USDC against a committed training corpus. A TEE-attested verifier
+            privately calculates each artist's share, then Arc settles the payment onchain.
           </p>
           <button onClick={() => scrollTo(proofRef)} style={{
             background: "var(--gradient)", color: "#04050A",
@@ -84,7 +80,28 @@ export default function App() {
           </button>
         </div>
 
-        {/* Mechanism flow — this product's actual steps */}
+        {/* Two-sided framing — the primary pitch, concrete and stranger-
+            testable, right below the headline before any mechanism detail. */}
+        <div className="tryit-grid" style={{ maxWidth: "820px", margin: "36px auto 0", textAlign: "left" }}>
+          <div className="g" style={{ padding: "16px 18px", borderLeft: "2px solid var(--accent)" }}>
+            <div style={{ fontSize: "9.5px", fontWeight: "700", letterSpacing: ".08em", textTransform: "uppercase", color: "var(--accent)", marginBottom: "8px" }}>
+              For AI companies
+            </div>
+            <div style={{ fontSize: "12.5px", color: "var(--text-muted)", lineHeight: "1.6" }}>
+              License training data without building your own rights, allocation and payment infrastructure.
+            </div>
+          </div>
+          <div className="g" style={{ padding: "16px 18px", borderLeft: "2px solid var(--violet)" }}>
+            <div style={{ fontSize: "9.5px", fontWeight: "700", letterSpacing: ".08em", textTransform: "uppercase", color: "var(--violet)", marginBottom: "8px" }}>
+              For artists
+            </div>
+            <div style={{ fontSize: "12.5px", color: "var(--text-muted)", lineHeight: "1.6" }}>
+              Opt in once. Get a verifiable share whenever your work is licensed for training.
+            </div>
+          </div>
+        </div>
+
+        {/* Mechanism flow — the user journey, not a contract-call list */}
         <div className="mechanism-grid">
           {STEPS.map((s) => (
             <div key={s.n} className="g" style={{ padding: "16px 14px", textAlign: "left" }}>
@@ -112,13 +129,15 @@ export default function App() {
       </section>
 
       {/* ── The product itself — the only section on the page. ── */}
-      <section ref={proofRef} className="px-section" style={{ paddingTop: "48px", paddingBottom: "56px" }}>
+      <section ref={proofRef} className="px-section" style={{ paddingTop: "48px", paddingBottom: "40px" }}>
         <div className="section-container" style={{ margin: "0 auto 20px" }}>
           <div className="display" style={{ fontSize: "20px", fontWeight: "700", letterSpacing: "-0.01em", color: "var(--text)" }}>
-            How it's enforced
+            Private verification. Public settlement.
           </div>
           <div style={{ fontSize: "11.5px", color: "var(--text-muted)", marginTop: "3px", maxWidth: "640px" }}>
-            A TEE-attested enclave — not a promise — verifies the corpus and licensing before any payout is computed.
+            The training corpus stays private. An attested enclave verifies dataset membership and
+            computes each artist's allocation. Only the resulting allocation is published onchain —
+            not the underlying music.
           </div>
         </div>
         <div className="section-container">
@@ -135,9 +154,21 @@ export default function App() {
         </div>
       </section>
 
+      {/* ── Secondary differentiation note — deliberately low-key, not
+          competing with the hero's two-sided framing for attention. ── */}
+      <section className="px-section" style={{ paddingTop: "8px", paddingBottom: "40px" }}>
+        <div className="section-container" style={{
+          maxWidth: "640px", textAlign: "center",
+          fontSize: "11px", color: "var(--text-faint)", lineHeight: "1.7",
+        }}>
+          <span style={{ fontWeight: "600", color: "var(--text-muted)" }}>Why ArcID? </span>
+          Existing licensing programs handle the relationship. ArcID handles the money and verification.
+        </div>
+      </section>
+
       <footer className="px-section" style={{ paddingTop: "24px", paddingBottom: "24px", borderTop: "1px solid var(--hairline)", textAlign: "center" }}>
         <span style={{ fontSize: "10.5px", color: "var(--text-faint)" }}>
-          Built for Encode × Arc × Circle — Programmable Money Hackathon
+          Built on Arc · Settled in USDC · Verified with TDX
         </span>
       </footer>
     </div>

@@ -30,6 +30,7 @@
     "bounty:submit": "node scripts/cli/bounty-submit.js",
     "bounty:server": "hardhat run bounty/server.js --network hardhat",
     "demo:training-compensation": "node scripts/cli/demo-training-compensation.js",
+    "demo:acquisition": "node scripts/cli/demo-acquisition.js",
     "bond:register-identity": "node scripts/cli/register-8004-identity.js",
     "bond:set-8004-agent-id": "node scripts/cli/set-8004-agent-id.js",
     "demo:premium-job": "node scripts/cli/demo-erc8183-job.js",

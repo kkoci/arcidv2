@@ -2,7 +2,7 @@
   "network": "hardhat",
   "chainId": 31337,
   "deployer": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-  "timestamp": 1786540951,
+  "timestamp": 1786550351,
   "addresses": {
     "ArtistRegistry": "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
     "TrainingPool": "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9",
@@ -11,6 +11,6 @@
     "collateralToken": "0x5FbDB2315678afecb367f032d93F642f64180aa3"
   },
   "ingestor": {
-    "address": "0xF90fCdbf8909970B725079ee715a1D48C64C955e"
+    "address": "0x4A6BAE12c1dd0Ce1a0C55bDBd2ccD240b2dDAD27"
   }
 }

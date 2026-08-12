@@ -1,0 +1,13 @@
+{
+  "name": "arcid-acquisition-agent",
+  "version": "1.0.0",
+  "description": "Licensed AI Training Compensation Rail — real LLM judgment layer that decides WHAT to license, handing off to the existing deterministic settlement machinery",
+  "main": "src/agent.js",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.52.0",
+    "dotenv": "^16.4.5"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

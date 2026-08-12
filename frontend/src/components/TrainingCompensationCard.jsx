@@ -1,3 +1,4 @@
+import { useState } from "react";
 import SealMark from "./SealMark.jsx";
 
 // Real, live-verified Arc testnet addresses from this vertical's Phase 7
@@ -10,9 +11,9 @@ const ADDRESSES = {
   CompensationClaim:   "0x33Df2A7b8642cbC68455231dB9833f5Aa1d3BFa5",
 };
 
-// Real transactions from this vertical's own live Arc testnet run — shown
-// unconditionally, no click required, same "proof without interaction"
-// property ProofOfExploitCard's PROOF_RECORDS already establishes.
+// Real transactions from this vertical's own live Arc testnet run — the
+// evidence behind the money-flow visual above, kept as detail someone can
+// open, not the first thing they see.
 const PROOF_RECORDS = [
   {
     title: "Attested allocation submitted",
@@ -36,21 +37,99 @@ const fmt = (a) => (a ? `${a.slice(0, 6)}…${a.slice(-4)}` : "—");
 export default function TrainingCompensationCard() {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-      <ProofFeed />
-      <RunItCard />
+      <MoneyFlow />
+      <VerifyDetail />
     </div>
   );
 }
 
-// ── What already happened, real, no click required ──
+// ── The centerpiece — a real money-flow sequence, not a documentation
+// list. Vertical by default (not just at mobile widths) so it degrades
+// identically at any viewport, matching the "↓" sequence in the spec. ──
+function MoneyFlow() {
+  const Arrow = () => (
+    <div style={{ textAlign: "center", color: "var(--text-faint)", fontSize: "16px", lineHeight: "1", margin: "2px 0" }} aria-hidden="true">↓</div>
+  );
+
+  return (
+    <div className="gh" style={{ padding: "28px 20px", overflow: "hidden" }}>
+      <div style={{ maxWidth: "440px", margin: "0 auto", display: "flex", flexDirection: "column", alignItems: "stretch" }}>
+
+        <div className="g" style={{ padding: "14px 18px", textAlign: "center" }}>
+          <div className="mono" style={{ fontSize: "19px", fontWeight: "700", color: "var(--text)" }}>$3.00 USDC</div>
+          <div style={{ fontSize: "10.5px", color: "var(--text-faint)", marginTop: "3px" }}>Training pool · 3 tracks licensed</div>
+        </div>
+
+        <Arrow />
+
+        <div className="g" style={{ padding: "12px 18px", textAlign: "center", borderColor: "var(--violet-soft)", background: "rgba(var(--violet-rgb),.06)" }}>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}>
+            <SealMark state="sealed" size={16} />
+            <span style={{ fontSize: "12px", fontWeight: "600", color: "var(--text)" }}>TEE verifies allocation</span>
+          </div>
+        </div>
+
+        <Arrow />
+
+        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", justifyContent: "center" }}>
+          <div className="g" style={{ padding: "12px 18px", textAlign: "center", flex: "1 1 160px" }}>
+            <div className="mono" style={{ fontSize: "16px", fontWeight: "700", color: "var(--settle)" }}>+$2.00 USDC</div>
+            <div style={{ fontSize: "10px", color: "var(--text-faint)", marginTop: "2px" }}>Artist A</div>
+          </div>
+          <div className="g" style={{ padding: "12px 18px", textAlign: "center", flex: "1 1 160px" }}>
+            <div className="mono" style={{ fontSize: "16px", fontWeight: "700", color: "var(--settle)" }}>+$1.00 USDC</div>
+            <div style={{ fontSize: "10px", color: "var(--text-faint)", marginTop: "2px" }}>Artist B</div>
+          </div>
+        </div>
+
+        <Arrow />
+
+        <div style={{
+          textAlign: "center", padding: "10px 18px", borderRadius: "10px",
+          background: "var(--settle-soft)", border: "1px solid rgba(52,211,153,.3)",
+        }}>
+          <span style={{ fontSize: "13px", fontWeight: "700", color: "var(--settle)" }}>✓ Settled on Arc</span>
+        </div>
+      </div>
+
+      <div style={{ textAlign: "center", fontSize: "11.5px", color: "var(--text-muted)", marginTop: "20px", lineHeight: "1.6" }}>
+        This isn't a simulation. These allocations were generated and settled on Arc testnet.
+      </div>
+    </div>
+  );
+}
+
+// ── Everything below is real evidence and the CLI reproduction path —
+// kept, but opened deliberately rather than competing with MoneyFlow
+// above for first attention. Same disclosure pattern this repo already
+// uses elsewhere (VerdictHistory's "▾ Full reasoning", the old
+// TechDetails toggle). ──
+function VerifyDetail() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div>
+      <button onClick={() => setOpen((v) => !v)} style={{
+        background: "none", border: "1px solid var(--hairline-hi)", color: "var(--text-muted)",
+        padding: "8px 14px", fontSize: "11px", borderRadius: "8px", fontWeight: "600",
+      }}>
+        {open ? "▾" : "▸"} Verify the transactions
+      </button>
+      {open && (
+        <div style={{ marginTop: "14px", display: "flex", flexDirection: "column", gap: "16px" }}>
+          <ProofFeed />
+          <RunItCard />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── What already happened, real — the detailed, per-transaction record. ──
 function ProofFeed() {
   return (
     <div>
       <div style={{ marginBottom: "12px" }}>
-        <div className="display" style={{ fontSize: "15px", fontWeight: "600", letterSpacing: "-0.01em", color: "var(--text)" }}>
-          Already proven, on Arc testnet
-        </div>
-        <div style={{ fontSize: "11px", color: "var(--text-faint)", marginTop: "3px" }}>
+        <div style={{ fontSize: "11px", color: "var(--text-faint)" }}>
           One real pool, one real allocation, two real claims · click any tx to verify
         </div>
       </div>
@@ -100,12 +179,12 @@ function ProofFeed() {
 // than wiring a button that doesn't actually do the real thing. ──
 function RunItCard() {
   return (
-    <div className="gh" style={{ overflow: "hidden" }}>
+    <div className="g" style={{ overflow: "hidden" }}>
       <div style={{
         padding: "14px 16px", borderBottom: "1px solid var(--hairline)",
         display: "flex", alignItems: "center", gap: "12px",
       }}>
-        <SealMark state="sealed" size={30} />
+        <SealMark state="sealed" size={26} />
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: "9px", color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: ".1em", fontWeight: "600" }}>
             Run a fresh cycle
